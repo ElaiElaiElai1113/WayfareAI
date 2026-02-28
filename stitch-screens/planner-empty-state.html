@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0b50da",
+                        "background-light": "#f5f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .soft-gradient-bg {
+            background: radial-gradient(circle at top right, rgba(11, 80, 218, 0.05), transparent),
+                        radial-gradient(circle at bottom left, rgba(11, 80, 218, 0.03), transparent);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased h-screen overflow-hidden">
+<div class="flex h-full flex-col">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between px-8 py-3 glass-panel sticky top-0 z-50 border-b border-slate-200/50 dark:border-slate-800/50">
+<div class="flex items-center gap-3">
+<div class="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-xl">travel_explore</span>
+</div>
+<h2 class="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Wayfare AI</h2>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-primary text-sm font-semibold border-b-2 border-primary pb-1" href="#">Planner</a>
+<a class="text-slate-500 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Explore</a>
+<a class="text-slate-500 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Bookings</a>
+<a class="text-slate-500 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Profile</a>
+</nav>
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center rounded-xl size-10 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined text-[22px]">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-xl size-10 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined text-[22px]">settings</span>
+</button>
+<div class="size-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden border-2 border-white dark:border-slate-800">
+<img class="w-full h-full object-cover" data-alt="User profile avatar portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBeY2iw3QKvV2H6cPmVCRu4QlbLIVJh8pQQRSyerL5RogMwHa_wDf3mXtbEAQ4_Wa2y6UC_zbZqcNZ4biWxRZ8LZ9fBuRkKH33d66hoXMDQZoT0HS0Omla2q_rBZpCIAjA_otrl-zkv0hh8BYaZ9luue-01qNtY7AQwh8iquB6_b-kVYFkl-SO5GOM5xAhww5w_gu3V1x84Su5oxRGdU4GBvSOR3wTkbEK8d7CzkcNnU1gtp_gB_9-fYigS77PBTRZu5V75zMUNO6Q"/>
+</div>
+</div>
+</header>
+<main class="flex flex-1 overflow-hidden relative">
+<!-- Left Sidebar: Itinerary Area (Empty State) -->
+<aside class="w-full md:w-[420px] lg:w-[480px] flex flex-col glass-panel border-r border-slate-200/50 dark:border-slate-800/50 z-20 overflow-y-auto soft-gradient-bg">
+<div class="p-6 flex flex-col h-full items-center justify-center text-center">
+<div class="relative mb-8 group">
+<div class="absolute -inset-4 bg-primary/10 rounded-full blur-2xl group-hover:bg-primary/20 transition-all"></div>
+<div class="relative size-64 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-700">
+<img class="w-full h-full object-cover opacity-90" data-alt="High quality aerial travel landscape photo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFrYR4_4SW9ZxF71vwSeU8wyJWBlmbfavI4uc2DkHF_b_NqFLS60chW-P9kgGo9sDO_EGyHLeQdzBSvNs_9msCu49iK9LPaKJPhS6TJ521qreEi3NE45PsVW89PRngve8V0WY_QlQa_zFB-pB1QT9Thm4uvbNxmnX41Y92ysuTg5oX9Cz2m8ko0hi-UOqKF4Adty4WAIXbF2zPwIc3MLg12xYMgsfhbg1cTuLjI37-80_iHVjDvk3ZZWBV-kK6JpydDcWeDe-MC58"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
+</div>
+</div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white mb-3">Your adventure starts here.</h1>
+<p class="text-slate-500 dark:text-slate-400 text-sm max-w-[280px] leading-relaxed mb-8">
+                        Enter your destination and preferences in the assistant below to begin crafting your perfect journey.
+                    </p>
+<div class="flex flex-col gap-3 w-full max-w-[320px]">
+<div class="flex items-center gap-3 p-4 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">AI-powered personalization</span>
+</div>
+<div class="flex items-center gap-3 p-4 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
+<span class="material-symbols-outlined text-primary">map</span>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Curated local experiences</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Right Content: Map View -->
+<section class="flex-1 relative bg-slate-100 dark:bg-slate-900">
+<div class="absolute inset-0 z-0">
+<img class="w-full h-full object-cover opacity-40 dark:opacity-20 blur-[2px]" data-alt="Soft blurred world map visualization" data-location="Global" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAt07hg21lG8-OlXdMbftmIvlh_2q-R2CDbX1O3Q4K79Gy6TTlzrfeX5-8IqynEh5brdmmuHxTGS1Yt0hA6nEV8gVYTLA_-GOcPea2J2wSlFGjCpB1mSX52nairzveSrgvjcg_PtNSYUs4Nos4Rf83M7_aaS2VmdBZ2gmxNauJkJUlwR4Jjh05Pxy9YzW4Mk5NS9rpOFaJCUH9LMrFaaB5mHFeqVpg37MHOqUK2BrZQof9fL6Jw1AF6eu_sz5J3ySwLPwC3OEf_iQ"/>
+</div>
+<!-- Floating Map Controls -->
+<div class="absolute top-6 right-6 flex flex-col gap-2 z-10">
+<button class="size-10 glass-panel rounded-xl flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-white transition-colors">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="size-10 glass-panel rounded-xl flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-white transition-colors">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<div class="h-4"></div>
+<button class="size-10 glass-panel rounded-xl flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-white transition-colors">
+<span class="material-symbols-outlined">my_location</span>
+</button>
+<button class="size-10 glass-panel rounded-xl flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-white transition-colors">
+<span class="material-symbols-outlined">layers</span>
+</button>
+</div>
+<!-- AI Assistant Input Area (Inactive State) -->
+<div class="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl px-6 z-30">
+<div class="glass-panel rounded-2xl p-2 shadow-2xl border border-white/40">
+<div class="flex items-center gap-2">
+<div class="bg-primary/10 dark:bg-primary/20 p-2.5 rounded-xl ml-1">
+<span class="material-symbols-outlined text-primary">smart_toy</span>
+</div>
+<input class="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-base py-3" placeholder="Ask AI to plan your next trip... (e.g., 'A 5-day food tour in Tokyo')" type="text"/>
+<div class="flex items-center gap-1 pr-1">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">calendar_today</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">group</span>
+</button>
+<button class="bg-primary hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg shadow-primary/20">
+<span>Plan</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Quick Suggestions -->
+<div class="flex justify-center gap-3 mt-4 overflow-x-auto no-scrollbar pb-2">
+<button class="whitespace-nowrap px-4 py-2 glass-panel rounded-full text-xs font-medium text-slate-600 dark:text-slate-300 hover:border-primary/50 transition-all">
+                            🏖️ Relaxing beach getaway
+                        </button>
+<button class="whitespace-nowrap px-4 py-2 glass-panel rounded-full text-xs font-medium text-slate-600 dark:text-slate-300 hover:border-primary/50 transition-all">
+                            🏔️ Adventure in Swiss Alps
+                        </button>
+<button class="whitespace-nowrap px-4 py-2 glass-panel rounded-full text-xs font-medium text-slate-600 dark:text-slate-300 hover:border-primary/50 transition-all">
+                            🏛️ Historic Rome tour
+                        </button>
+</div>
+</div>
+</section>
+</main>
+</div>
+</body></html>

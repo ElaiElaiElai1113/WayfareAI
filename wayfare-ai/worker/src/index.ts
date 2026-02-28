@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { createItinerary, fetchNearbyPois, applyBudgetAdjustment, applyPaceChange } from "../lib/engine";
 import type { Env, Itinerary, PlanRequest } from "./types";
+import { validateEnv } from "./types";
 import { cacheKey, rateLimit, slugify, withCache, withRetry, callGLM, callGLMForItinerary } from "./utils";
 
 // Validate environment at startup (will be validated on first request with actual env)
@@ -99,33 +100,48 @@ app.use("/api/*", async (c, next) => {
 
 app.get("/api/geocode", async (c) => {
   const q = c.req.query("q");
-  if (!q) return c.json([], 200);
+  if (!q || q.length < 2) return c.json([], 200);
 
   const ttl = Number(c.env.CACHE_TTL_SECONDS || "21600");
-  const result = await withCache(c.env, cacheKey("geo-autocomplete", q), ttl, async () => {
-    return await withRetry(async () => {
-      const url = `${c.env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`;
-      const response = await fetch(url, {
-        headers: { "User-Agent": "WayfareAI/1.0" },
-        signal: AbortSignal.timeout(10000) // 10s timeout
-      });
+  try {
+    const result = await withCache(c.env, cacheKey("geo-autocomplete", q), ttl, async () => {
+      return await withRetry(
+        async () => {
+          const url = `${c.env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=5&addressdetails=0&q=${encodeURIComponent(q)}`;
+          const response = await fetch(url, {
+            headers: { "User-Agent": "WayfareAI/1.0", "Accept-Language": "en-US,en;q=0.9" },
+            signal: AbortSignal.timeout(15000) // 15s timeout with more tolerance
+          });
 
-      if (!response.ok) {
-        const error = new Error(`Nominatim API error: ${response.status}`);
-        (error as any).status = response.status;
-        throw error;
-      }
+          if (!response.ok) {
+            const error = new Error(`Nominatim API error: ${response.status}`);
+            (error as any).status = response.status;
+            throw error;
+          }
 
-      const data = await response.json() as Array<any>;
-      return data.map((item) => ({
-        name: item.display_name,
-        bbox: [Number(item.boundingbox[2]), Number(item.boundingbox[0]), Number(item.boundingbox[3]), Number(item.boundingbox[1])],
-        center: [Number(item.lon), Number(item.lat)]
-      }));
+          const data = await response.json() as Array<any>;
+
+          // Handle empty results gracefully
+          if (!data || data.length === 0) {
+            return [];
+          }
+
+          return data.map((item) => ({
+            name: item.display_name || item.name,
+            bbox: [Number(item.boundingbox[2]), Number(item.boundingbox[0]), Number(item.boundingbox[3]), Number(item.boundingbox[1])],
+            center: [Number(item.lon), Number(item.lat)]
+          }));
+        },
+        { maxRetries: 2, baseDelay: 1000 } // Fewer retries for geocoding
+      );
     });
-  });
 
-  return c.json(result);
+    return c.json(result);
+  } catch (error) {
+    console.error("Geocode error:", error);
+    // Return empty array instead of throwing to prevent 500 errors
+    return c.json([], 200);
+  }
 });
 
 app.get("/api/pois", async (c) => {
@@ -504,4 +520,6 @@ app.get("/api/health", async (c) => {
 });
 
 export default app;
+
+
 

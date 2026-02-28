@@ -1,49 +1,96 @@
-﻿@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 195 50% 96%;
-  --foreground: 205 35% 16%;
-  --card: 0 0% 100% / 0.62;
-  --card-foreground: 208 38% 17%;
-  --primary: 197 77% 35%;
-  --primary-foreground: 0 0% 100%;
-  --muted: 192 30% 90%;
-  --muted-foreground: 205 22% 34%;
-  --accent: 37 61% 80%;
-  --accent-foreground: 206 36% 20%;
-  --border: 196 35% 82%;
-  --ring: 194 70% 44%;
-}
-
 * {
-  @apply border-border;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 body {
-  @apply text-foreground antialiased;
-  margin: 0;
-  font-family: "Outfit", sans-serif;
-  min-height: 100vh;
-  background:
-    radial-gradient(1200px 500px at -5% 0%, rgba(240, 205, 156, 0.6), transparent 70%),
-    radial-gradient(1000px 500px at 105% 100%, rgba(112, 189, 200, 0.5), transparent 70%),
-    linear-gradient(135deg, #f8ecd4 0%, #e5f4f7 48%, #d6eef3 100%);
+  @apply text-slate-900 dark:text-slate-100 antialiased;
+  font-family: "Inter", "Public Sans", sans-serif;
+  overflow-x: hidden;
 }
 
-h1, h2, h3 {
-  font-family: "Fraunces", serif;
-}
-
+/* Glass Card Effect */
 .glass-card {
-  background: rgba(255, 255, 255, 0.52);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
+.dark .glass-card {
+  background: rgba(16, 22, 34, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Hide scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #0b50da44;
+  border-radius: 10px;
+}
+
+/* Map styles */
 .maplibregl-popup-content {
   border-radius: 10px;
-  font-family: "Outfit", sans-serif;
+  font-family: "Inter", "Public Sans", sans-serif;
 }
 
+/* Material Symbols Outlined */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  display: inline-block;
+  line-height: 1;
+}
+
+.material-symbols-outlined.filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* Animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}

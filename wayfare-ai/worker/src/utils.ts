@@ -184,7 +184,7 @@ export async function callGLM(
       { maxRetries: 2, baseDelay: 2000 }
     );
 
-    return data.choices?.[0]?.message?.content ?? null;
+    return response.choices?.[0]?.message?.content ?? null;
   } catch (error) {
     console.error("GLM API call failed:", error);
     return null;
@@ -269,10 +269,11 @@ export async function callGLMForItinerary(
       { maxRetries: 2, baseDelay: 3000 }
     );
 
-    return data.choices?.[0]?.message?.content ?? null;
+    return response.choices?.[0]?.message?.content ?? null;
   } catch (error) {
     console.error("GLM itinerary generation failed:", error);
     return null;
   }
 }
+
 

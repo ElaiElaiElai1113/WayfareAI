@@ -1,13 +1,10 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { geocode } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Sparkles } from "lucide-react";
 import type { PlanRequest } from "@/types/itinerary";
 
 const schema = z.object({
@@ -35,12 +32,12 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 const defaults: FormValues = {
-  city: "Lisbon",
-  days: 3,
+  city: "El Nido, Palawan",
+  days: 4,
   dailyStartTime: "09:00",
   dailyEndTime: "20:00",
-  budget: 450,
-  currency: "USD",
+  budget: 15000,
+  currency: "PHP",
   travelStyle: "Balanced",
   transportMode: "walking",
   mustSee: "",
@@ -86,143 +83,159 @@ export function PlannerForm({ onSubmit, loading }: { onSubmit: (payload: PlanReq
 
   const preferenceKeys = useMemo(
     () => [
-      { key: "nature", label: "Nature" },
-      { key: "museums", label: "Museums" },
-      { key: "cafes", label: "Cafes" },
-      { key: "localFood", label: "Local Food" },
-      { key: "nightlife", label: "Nightlife" },
-      { key: "shopping", label: "Shopping" },
-      { key: "hiddenGems", label: "Hidden Gems" }
+      { key: "nature", label: "Nature", icon: "water_drop" },
+      { key: "museums", label: "Culture", icon: "museum" },
+      { key: "cafes", label: "Foodie", icon: "restaurant" },
+      { key: "nightlife", label: "Nightlife", icon: "nightlife" }
     ] as const,
     []
   );
 
   return (
-    <Card>
-      <form
-        className="grid gap-4 md:grid-cols-3"
-        onSubmit={form.handleSubmit(async (values) => {
-          const geo = await geocode(values.city);
-          if (!geo.length) {
-            form.setError("city", { message: "City not found" });
-            return;
-          }
-
-          await onSubmit({
-            city: values.city,
-            days: values.days,
-            dailyStartTime: values.dailyStartTime,
-            dailyEndTime: values.dailyEndTime,
-            budget: values.budget,
-            currency: values.currency,
-            travelStyle: values.travelStyle,
-            transportMode: values.transportMode,
-            mustSee:
-              values
-                .mustSee?.split(",")
-                .map((s) => s.trim())
-                .filter(Boolean) ?? [],
-            preferences: {
-              nature: values.nature,
-              museums: values.museums,
-              cafes: values.cafes,
-              localFood: values.localFood,
-              nightlife: values.nightlife,
-              shopping: values.shopping,
-              hiddenGems: values.hiddenGems
-            },
-            rainPlan: values.rainPlan,
-            budgetSaver: values.budgetSaver,
-            useAI: values.useAI
-          });
-        })}
-      >
-        <div className="space-y-2 md:col-span-2">
-          <label className="text-sm font-medium text-slate-700">City</label>
-          <Input list="city-options" placeholder="Search city" {...form.register("city")} />
-          <datalist id="city-options">
-            {suggestions.map((option, index) => (
-              <option key={`${option.name}-${index}`} value={option.name} />
-            ))}
-          </datalist>
-          {form.formState.errors.city && <p className="text-xs text-red-600">{form.formState.errors.city.message}</p>}
+    <div className="flex flex-col h-full">
+      <div>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Plan Controls</h3>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold ml-1">Location</label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400">location_on</span>
+              <Input
+                list="city-options"
+                placeholder="Search city..."
+                className="w-full pl-10 pr-4 py-2 bg-white/80 rounded-xl border-slate-200 focus:ring-primary focus:border-primary text-sm"
+                {...form.register("city")}
+              />
+              <datalist id="city-options">
+                {suggestions.map((option, index) => (
+                  <option key={`${option.name}-${index}`} value={option.name} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold ml-1">Budget Range</label>
+            <input
+              type="range"
+              min={0}
+              max={50000}
+              step={1000}
+              className="w-full accent-primary h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+              {...form.register("budget")}
+            />
+            <div className="flex justify-between text-xs font-medium text-slate-500">
+              <span>₱0</span>
+              <span>₱15,000</span>
+              <span>₱50k+</span>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Days</label>
-          <Input type="number" min={1} max={14} {...form.register("days")} />
+      <div>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Intensity</h3>
+        <div className="grid grid-cols-3 gap-2 p-1 bg-slate-200/50 rounded-xl">
+          <button
+            type="button"
+            onClick={() => form.setValue("travelStyle", "Relaxed")}
+            className={`text-xs font-bold py-2 rounded-lg transition-all ${
+              form.watch("travelStyle") === "Relaxed"
+                ? "bg-white shadow-sm text-primary"
+                : "text-slate-600"
+            }`}
+          >
+            Relaxed
+          </button>
+          <button
+            type="button"
+            onClick={() => form.setValue("travelStyle", "Balanced")}
+            className={`text-xs font-bold py-2 rounded-lg transition-all ${
+              form.watch("travelStyle") === "Balanced"
+                ? "bg-white shadow-sm text-primary"
+                : "text-slate-600"
+            }`}
+          >
+            Balanced
+          </button>
+          <button
+            type="button"
+            onClick={() => form.setValue("travelStyle", "Packed")}
+            className={`text-xs font-bold py-2 rounded-lg transition-all ${
+              form.watch("travelStyle") === "Packed"
+                ? "bg-white shadow-sm text-primary"
+                : "text-slate-600"
+            }`}
+          >
+            Packed
+          </button>
         </div>
+      </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Start Time</label>
-          <Input type="time" {...form.register("dailyStartTime")} />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">End Time</label>
-          <Input type="time" {...form.register("dailyEndTime")} />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Budget</label>
-          <Input type="number" min={1} {...form.register("budget")} />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Currency</label>
-          <Input maxLength={4} {...form.register("currency")} />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Travel Style</label>
-          <select className="h-10 w-full rounded-xl border border-white/70 bg-white/65 px-3 text-sm" {...form.register("travelStyle")}>
-            <option value="Relaxed">Relaxed</option>
-            <option value="Balanced">Balanced</option>
-            <option value="Packed">Packed</option>
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Transport</label>
-          <select className="h-10 w-full rounded-xl border border-white/70 bg-white/65 px-3 text-sm" {...form.register("transportMode")}>
-            <option value="walking">Walking</option>
-            <option value="driving">Driving</option>
-          </select>
-        </div>
-
-        <div className="space-y-2 md:col-span-3">
-          <label className="text-sm font-medium text-slate-700">Must-see places (comma separated)</label>
-          <Input placeholder="Belém Tower, Alfama" {...form.register("mustSee")} />
-        </div>
-
-        <div className="grid gap-2 md:col-span-3 md:grid-cols-4">
+      <div>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Interests</h3>
+        <div className="flex flex-wrap gap-2">
           {preferenceKeys.map((item) => (
-            <label key={item.key} className="flex items-center justify-between rounded-xl border border-white/70 bg-white/55 px-3 py-2 text-sm text-slate-700">
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => form.setValue(item.key as any, !form.watch(item.key as any))}
+              className={`px-3 py-1.5 rounded-full border text-xs font-bold flex items-center gap-1 ${
+                form.watch(item.key as any)
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-slate-200 bg-white/50 text-slate-600"
+              }`}
+            >
+              <span className="material-symbols-outlined text-xs">{item.icon}</span>
               {item.label}
-              <Switch checked={form.watch(item.key)} onCheckedChange={(value) => form.setValue(item.key, value)} />
-            </label>
+            </button>
           ))}
-          <label className="flex items-center justify-between rounded-xl border border-white/70 bg-white/55 px-3 py-2 text-sm text-slate-700">
-            <Sparkles className="h-4 w-4 text-slate-500" />
-            AI Enhancement
-            <Switch checked={form.watch("useAI")} onCheckedChange={(value) => form.setValue("useAI", value)} />
-          </label>
-          <label className="flex items-center justify-between rounded-xl border border-white/70 bg-white/55 px-3 py-2 text-sm text-slate-700">
-            Rain Plan
-            <Switch checked={form.watch("rainPlan")} onCheckedChange={(value) => form.setValue("rainPlan", value)} />
-          </label>
-          <label className="flex items-center justify-between rounded-xl border border-white/70 bg-white/55 px-3 py-2 text-sm text-slate-700">
-            Budget Saver
-            <Switch checked={form.watch("budgetSaver")} onCheckedChange={(value) => form.setValue("budgetSaver", value)} />
-          </label>
         </div>
+      </div>
 
-        <div className="md:col-span-3">
-          <Button type="submit" disabled={loading}>
-            {loading ? "Planning..." : "Generate Itinerary"}
-          </Button>
-        </div>
-      </form>
-    </Card>
+      <div className="mt-auto">
+        <button
+          onClick={form.handleSubmit(async (values) => {
+            const geo = await geocode(values.city);
+            if (!geo.length) {
+              form.setError("city", { message: "City not found" });
+              return;
+            }
+
+            await onSubmit({
+              city: values.city,
+              days: values.days,
+              dailyStartTime: values.dailyStartTime,
+              dailyEndTime: values.dailyEndTime,
+              budget: values.budget,
+              currency: values.currency,
+              travelStyle: values.travelStyle,
+              transportMode: values.transportMode,
+              mustSee:
+                values
+                  .mustSee?.split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean) ?? [],
+              preferences: {
+                nature: values.nature,
+                museums: values.museums,
+                cafes: values.cafes,
+                localFood: values.localFood,
+                nightlife: values.nightlife,
+                shopping: values.shopping,
+                hiddenGems: values.hiddenGems
+              },
+              rainPlan: values.rainPlan,
+              budgetSaver: values.budgetSaver,
+              useAI: values.useAI
+            });
+          })}
+          disabled={loading}
+          className="w-full py-4 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="material-symbols-outlined">auto_fix_high</span>
+          <span>{loading ? "Planning..." : "Generate Plan"}</span>
+        </button>
+      </div>
+    </div>
   );
 }

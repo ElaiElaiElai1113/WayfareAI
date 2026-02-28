@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#0b50da",
+              "background-light": "#f5f6f8",
+              "background-dark": "#101622",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .ocean-gradient {
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+        }
+    </style>
+</head>
+<body class="font-display bg-background-light text-slate-900 overflow-x-hidden min-h-screen">
+<div class="flex min-h-screen">
+<!-- Sidebar Navigation -->
+<aside class="w-64 border-r border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 h-screen flex flex-col p-6 hidden lg:flex">
+<div class="flex items-center gap-3 mb-10">
+<div class="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined">dataset</span>
+</div>
+<h2 class="text-slate-900 text-xl font-bold tracking-tight">Wayfare AI</h2>
+</div>
+<nav class="flex flex-col gap-2 grow">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-primary/5 rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">map</span>
+<span class="font-medium text-sm">Plan Trip</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-primary/5 rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">favorite</span>
+<span class="font-medium text-sm">Saved Trips</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/20" href="#">
+<span class="material-symbols-outlined">confirmation_number</span>
+<span class="font-medium text-sm">Bookings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-primary/5 rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-medium text-sm">Profile</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 border-t border-slate-100">
+<div class="flex items-center gap-3 px-2">
+<div class="w-10 h-10 rounded-full bg-slate-200" data-alt="User profile avatar photo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDCMtVMGh03R-GFQI4xkPUNuACZzVUzo0gXoqxRpcDDMm8BAdNYXbdrrZEsJxtOOR73Vr3dcQ0d7GvMhXbR8hIq8FaO71P7Oaz-E6j11IjiNFX6I9wQcJQAS5tgqqlJvzH-8W34QMKnCWVg220Ia2TgxEiuEdOgMKKetoNT6ibsEvZSsFLOYt1ehef3NgCf6KLupANj4LIP04ORE-8aefoVpqVKyt7YYNRn35FDBmv3eb8EM-K6d-g_dl8Z7tZ1Txprhzawj2w3-K8'); background-size: cover;"></div>
+<div>
+<p class="text-sm font-bold text-slate-900">Alex Rivera</p>
+<p class="text-xs text-slate-500 italic">Premium Member</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto px-6 lg:px-12 py-8 bg-gradient-to-br from-orange-50/30 via-white to-blue-50/30">
+<!-- Header & Search Bar -->
+<header class="max-w-6xl mx-auto mb-10">
+<div class="flex items-center justify-between mb-8">
+<div>
+<h1 class="text-3xl font-bold text-slate-900 mb-2">Find your next escape</h1>
+<p class="text-slate-500">AI-curated bookings for your El Nido adventure</p>
+</div>
+<div class="flex gap-3">
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-600 hover:shadow-md transition-all">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+</div>
+</div>
+<!-- Search/Filter Bar -->
+<div class="glass-card rounded-2xl p-4 shadow-xl shadow-slate-200/50 flex flex-wrap lg:flex-nowrap gap-4 items-center">
+<div class="flex-1 flex items-center gap-3 px-4 py-2 bg-white/50 border border-slate-100 rounded-xl">
+<span class="material-symbols-outlined text-primary">location_on</span>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase font-bold text-slate-400 leading-none">Destination</span>
+<input class="bg-transparent border-none p-0 focus:ring-0 text-sm font-semibold text-slate-900 w-full" data-location="El Nido" type="text" value="El Nido, Palawan"/>
+</div>
+</div>
+<div class="w-px h-10 bg-slate-200 hidden lg:block"></div>
+<div class="flex-1 flex items-center gap-3 px-4 py-2 bg-white/50 border border-slate-100 rounded-xl">
+<span class="material-symbols-outlined text-primary">calendar_today</span>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase font-bold text-slate-400 leading-none">Dates</span>
+<span class="text-sm font-semibold text-slate-900">Oct 12 - Oct 15</span>
+</div>
+</div>
+<div class="w-px h-10 bg-slate-200 hidden lg:block"></div>
+<div class="flex-1 flex items-center gap-3 px-4 py-2 bg-white/50 border border-slate-100 rounded-xl">
+<span class="material-symbols-outlined text-primary">group</span>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase font-bold text-slate-400 leading-none">Guests</span>
+<span class="text-sm font-semibold text-slate-900">2 Guests, 1 Room</span>
+</div>
+</div>
+<button class="w-full lg:w-auto px-8 py-3 bg-primary text-white font-bold rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">search</span>
+                        Search
+                    </button>
+</div>
+</header>
+<!-- Grid Content -->
+<div class="max-w-6xl mx-auto grid grid-cols-1 xl:grid-cols-2 gap-10">
+<!-- Flights Column -->
+<section>
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">flight_takeoff</span>
+                            Available Flights
+                        </h3>
+<button class="text-primary text-sm font-bold hover:underline">View All</button>
+</div>
+<div class="space-y-4">
+<!-- Flight Card 1 (Recommended) -->
+<div class="glass-card rounded-2xl p-5 hover:scale-[1.02] transition-transform cursor-pointer relative overflow-hidden group">
+<div class="absolute top-0 right-0 bg-primary text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
+                                Recommended for you
+                            </div>
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-white p-1 flex items-center justify-center border border-slate-100 shadow-sm">
+<img alt="Philippine Airlines Logo" class="object-contain" data-alt="Philippine Airlines minimalist corporate logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHHLCksEy-vPxy-a66ONk7RguPxMRGVzJk0BX0NmYXUHDBeDhQtcb9ziMXZZtgrbAOEm7DIEA7PywrSJZCUQY4eokr5o8x57ODwgDS9OOSvoHP3gUaunyStfG3QA2CSvWlVoFnteSlBbVhitZ8au278QGyOYFT_CpRKxBhfq4KjLmjGq5aIEaWkZvjGn7hjOp9JvJqmPzImCHeh8U-iM7nH6P5VjFyacxc5Uo4Imxrbjll55qz9vdSydw6p5QhOm3VXpLJpH7tqwU"/>
+</div>
+<span class="font-bold text-slate-900">Philippine Airlines</span>
+</div>
+<div class="text-right">
+<span class="text-2xl font-bold text-slate-900">₱5,400</span>
+<p class="text-[10px] text-slate-400 uppercase font-bold">Round Trip</p>
+</div>
+</div>
+<div class="flex items-center justify-between text-slate-900 mb-6">
+<div class="text-center">
+<p class="text-lg font-bold leading-none">08:00</p>
+<p class="text-xs text-slate-500 font-medium">MNL</p>
+</div>
+<div class="flex-1 px-6 flex flex-col items-center">
+<span class="text-[10px] text-slate-400 font-bold mb-1">1h 30m</span>
+<div class="w-full h-[2px] bg-slate-200 relative">
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border-2 border-primary bg-white"></div>
+</div>
+<span class="text-[10px] text-primary font-bold mt-1">Non-stop</span>
+</div>
+<div class="text-center">
+<p class="text-lg font-bold leading-none">09:30</p>
+<p class="text-xs text-slate-500 font-medium">ENI</p>
+</div>
+</div>
+<button class="w-full py-3 border-2 border-primary text-primary hover:bg-primary hover:text-white font-bold rounded-xl transition-all">
+                                Select Flight
+                            </button>
+</div>
+<!-- Flight Card 2 -->
+<div class="glass-card rounded-2xl p-5 hover:shadow-lg transition-all cursor-pointer border-transparent hover:border-slate-200">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-white p-1 flex items-center justify-center border border-slate-100 shadow-sm">
+<span class="material-symbols-outlined text-slate-400">flight</span>
+</div>
+<span class="font-bold text-slate-900">AirSwift</span>
+</div>
+<div class="text-right">
+<span class="text-2xl font-bold text-slate-900">₱4,850</span>
+<p class="text-[10px] text-slate-400 uppercase font-bold">Round Trip</p>
+</div>
+</div>
+<div class="flex items-center justify-between text-slate-900 mb-6">
+<div class="text-center">
+<p class="text-lg font-bold leading-none">10:15</p>
+<p class="text-xs text-slate-500 font-medium">MNL</p>
+</div>
+<div class="flex-1 px-6 flex flex-col items-center">
+<span class="text-[10px] text-slate-400 font-bold mb-1">1h 15m</span>
+<div class="w-full h-[1px] bg-slate-200"></div>
+<span class="text-[10px] text-slate-400 font-bold mt-1">Non-stop</span>
+</div>
+<div class="text-center">
+<p class="text-lg font-bold leading-none">11:30</p>
+<p class="text-xs text-slate-500 font-medium">ENI</p>
+</div>
+</div>
+<button class="w-full py-3 bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold rounded-xl transition-all">
+                                Select Flight
+                            </button>
+</div>
+</div>
+</section>
+<!-- Hotels Column -->
+<section>
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">apartment</span>
+                            Luxury Hotels
+                        </h3>
+<button class="text-primary text-sm font-bold hover:underline">View All</button>
+</div>
+<div class="grid grid-cols-1 gap-6">
+<!-- Hotel Card 1 -->
+<div class="glass-card rounded-2xl overflow-hidden group shadow-lg hover:shadow-xl transition-all">
+<div class="relative h-48">
+<img alt="El Nido Resort View" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="Luxury tropical resort overwater bungalow view" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcqMCBdkWx1XivODq3UKgFCPnRJ0dUQI0HG3WM1yQ-YmJLYjQPPcuiIig1AHsXyzMKYs0rrM6m-HFvuaESJc11TQyFWbJN68gwVoJck-PWjXEZ65hMsG7lH_J11osdAEdvbHB2WYAS1H4YtvBvLnxuzj6nqlcglEtkslLruJEtpgGXFsf-OJBry--_VE-QCg1nWXcM3WuqWI5NAaF021LiB4ElXDQakbwk9_ohDGGzDKzhhLp0t4wt59oaqgafrCC_Ki_a3IkWlN8"/>
+<div class="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-yellow-500 text-[16px] fill-current">star</span>
+<span class="text-xs font-bold text-slate-900">4.9</span>
+</div>
+<div class="absolute top-4 right-4 bg-primary text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                                    Top Choice
+                                </div>
+</div>
+<div class="p-5">
+<div class="flex justify-between items-start mb-2">
+<div>
+<h4 class="text-lg font-bold text-slate-900">El Nido Resorts Pangulasian</h4>
+<p class="text-xs text-slate-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">location_on</span> Bacuit Bay, El Nido
+                                        </p>
+</div>
+<div class="text-right">
+<span class="text-xl font-bold text-slate-900">₱12,500</span>
+<p class="text-[10px] text-slate-400 font-bold">/ NIGHT</p>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 my-4">
+<span class="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase">
+<span class="material-symbols-outlined text-[14px]">wifi</span> Free WiFi
+                                    </span>
+<span class="flex items-center gap-1 px-3 py-1 bg-green-50 text-green-600 rounded-lg text-[10px] font-bold uppercase">
+<span class="material-symbols-outlined text-[14px]">pool</span> Pool
+                                    </span>
+<span class="flex items-center gap-1 px-3 py-1 bg-orange-50 text-orange-600 rounded-lg text-[10px] font-bold uppercase">
+<span class="material-symbols-outlined text-[14px]">restaurant</span> Breakfast
+                                    </span>
+</div>
+<button class="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-primary/20 transition-all">
+                                    Book Now
+                                </button>
+</div>
+</div>
+<!-- Hotel Card 2 -->
+<div class="glass-card rounded-2xl overflow-hidden group hover:shadow-lg transition-all">
+<div class="relative h-48">
+<img alt="Lagen Island Resort" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="Modern eco-resort nestled between limestone cliffs and ocean" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtKcbgVtLWOG95dnH-vjkZteQfZaXKIE5A2C6Pcis7CgcTEAhR47s5KxKX9epvpH2HkRh9jAmbA5Vj6SzwjcH4H-P90MkLT-3lPpaQe_-soJNSgTNAHcCXZN5RdXo-Otzt8VOZBzZ_8GkK4a_wPuL1OgCr-BRt54mz039hY39r4xoEFrGxgKjIBjQmeh6w8BFU5FmWVKkq0G6bn5cgUOwbJcJVEf1z12tA6DTsUUCvXXQme8MfWoiOvEV1P_8qLU9fZN8hH3eQTI4"/>
+<div class="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-yellow-500 text-[16px] fill-current">star</span>
+<span class="text-xs font-bold text-slate-900">4.7</span>
+</div>
+</div>
+<div class="p-5">
+<div class="flex justify-between items-start mb-2">
+<div>
+<h4 class="text-lg font-bold text-slate-900">Lagen Island Eco-Resort</h4>
+<p class="text-xs text-slate-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">location_on</span> Lagen Island, El Nido
+                                        </p>
+</div>
+<div class="text-right">
+<span class="text-xl font-bold text-slate-900">₱9,800</span>
+<p class="text-[10px] text-slate-400 font-bold">/ NIGHT</p>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 my-4">
+<span class="flex items-center gap-1 px-3 py-1 bg-green-50 text-green-600 rounded-lg text-[10px] font-bold uppercase">
+<span class="material-symbols-outlined text-[14px]">spa</span> Spa
+                                    </span>
+<span class="flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase">
+<span class="material-symbols-outlined text-[14px]">kayaking</span> Private Beach
+                                    </span>
+</div>
+<button class="w-full py-3 border-2 border-slate-200 text-slate-600 hover:border-primary hover:text-primary font-bold rounded-xl transition-all">
+                                    Select Room
+                                </button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Footer Quick Stats -->
+<footer class="max-w-6xl mx-auto mt-12 mb-8 flex flex-wrap gap-6 items-center justify-between text-slate-500 text-sm">
+<div class="flex gap-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">verified</span>
+                        Price Guarantee
+                    </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">headset_mic</span>
+                        24/7 AI Concierge
+                    </div>
+</div>
+<div class="flex items-center gap-4">
+<span>Currency: <b>PHP (₱)</b></span>
+<span class="w-px h-4 bg-slate-300"></span>
+<span>Language: <b>English</b></span>
+</div>
+</footer>
+</main>
+</div>
+</body></html>

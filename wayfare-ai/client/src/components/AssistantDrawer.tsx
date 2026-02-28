@@ -1,21 +1,17 @@
-﻿import { useMemo, useState } from "react";
-import { MessageCircle, Send, RotateCcw, RefreshCw, DollarSign, Gauge } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { streamChat } from "@/lib/api";
 import type { Itinerary } from "@/types/itinerary";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-const QUICK_ACTIONS = [
-  { label: "Replan Day 1", icon: RotateCcw, command: "replan_day(1)" },
-  { label: "Swap Stop", icon: RefreshCw, command: "swap_stop(stop_1)" },
-  { label: "Find Cafes", icon: MessageCircle, command: "suggest_nearby(cafes,2000)" },
-  { label: "Adjust Budget", icon: DollarSign, command: "adjust_budget(300)" },
-  { label: "Relaxed Pace", icon: Gauge, command: "change_pace(Relaxed)" }
+const QUICK_SUGGESTIONS = [
+  "Less walking",
+  "Add more food",
+  "More culture",
+  "Relaxing options"
 ];
 
 export function AssistantDrawer({ itinerary, onUpdateItinerary, openDefault }: { itinerary: Itinerary | null; onUpdateItinerary: (next: Itinerary) => void; openDefault?: boolean }) {
@@ -66,72 +62,83 @@ export function AssistantDrawer({ itinerary, onUpdateItinerary, openDefault }: {
     }
   };
 
+  if (!itinerary || !open) {
+    return null;
+  }
+
   return (
-    <aside className="fixed bottom-4 right-4 top-4 z-30 w-[calc(100%-2rem)] max-w-md">
-      {open ? (
-        <Card className="h-full p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-800">Wayfare Assistant</h3>
-            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Close</Button>
-          </div>
+    <div className="absolute right-0 top-0 bottom-0 w-80 glass-card border-l border-white/50 flex flex-col shadow-2xl z-10 backdrop-blur-md bg-white/70">
+      <div className="p-4 border-b border-slate-200 flex items-center gap-2">
+        <div className="bg-primary/20 text-primary p-1.5 rounded-lg">
+          <span className="material-symbols-outlined text-lg">smart_toy</span>
+        </div>
+        <h4 className="font-bold text-sm">Travel Assistant</h4>
+        <span className="size-2 rounded-full bg-green-500 animate-pulse ml-auto"></span>
+      </div>
 
-          <div className="mb-2 flex flex-wrap gap-2">
-            <TooltipProvider>
-              {QUICK_ACTIONS.map((action) => (
-                <Tooltip key={action.command}>
-                  <TooltipTrigger asChild>
-                    <button
-                      className="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:bg-white/90 hover:shadow-md"
-                      onClick={() => send(action.command)}
-                    >
-                      <action.icon className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{action.label}</span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={8}>
-                    {action.command}
-                  </TooltipContent>
-                </Tooltip>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 ? (
+          <>
+            <div className="bg-white/60 p-3 rounded-2xl rounded-tl-none text-xs leading-relaxed border border-white">
+              Hi! I've organized your {itinerary.city} trip to balance relaxation and exploration. Would you like me to adjust anything?
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {QUICK_SUGGESTIONS.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => send(suggestion)}
+                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold hover:border-primary transition-colors"
+                >
+                  {suggestion}
+                </button>
               ))}
-            </TooltipProvider>
-          </div>
+            </div>
+          </>
+        ) : null}
 
-          <div className="h-[calc(100%-7.5rem)] overflow-y-auto rounded-xl bg-white/45 p-3">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-                <MessageCircle className="h-10 w-10 text-slate-400" />
-                <p className="text-sm text-slate-600">Ask for swaps, budget edits, or day replans.</p>
-              </div>
-            ) : null}
-            {messages.map((message, idx) => (
-              <div
-                key={idx}
-                className={`mb-3 rounded-2xl px-4 py-3 text-sm ${
-                  message.role === "user"
-                    ? "ml-auto bg-primary text-white shadow-md max-w-[85%]"
-                    : "mr-auto bg-white/90 text-slate-700 shadow-sm max-w-[90%]"
-                }`}
-              >
-                {message.content}
-              </div>
-            ))}
+        {messages.map((message, idx) => (
+          <div
+            key={idx}
+            className={`text-xs leading-relaxed ${
+              message.role === "user"
+                ? "bg-primary text-white p-3 rounded-2xl rounded-tr-none ml-auto max-w-[80%]"
+                : "bg-white/60 p-3 rounded-2xl rounded-tl-none mr-auto border border-white"
+            }`}
+          >
+            {message.content}
           </div>
+        ))}
+      </div>
 
-          <div className="mt-2 flex gap-2">
-            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask Wayfare Assistant..." onKeyDown={(e) => e.key === "Enter" && !disabled && send()} />
-            <Button onClick={() => send()} disabled={disabled}>
-              {loading ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </Card>
-      ) : (
-        <Button className="w-full md:w-auto" onClick={() => setOpen(true)}><MessageCircle className="h-4 w-4" /> Wayfare Assistant</Button>
-      )}
-    </aside>
+      <div className="p-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {QUICK_SUGGESTIONS.slice(0, 2).map((suggestion) => (
+            <button
+              key={suggestion}
+              onClick={() => send(suggestion)}
+              className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold hover:border-primary transition-colors"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+        <div className="relative">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask AI to change plan..."
+            className="w-full pl-4 pr-10 py-3 bg-white rounded-xl border-slate-200 text-xs focus:ring-primary focus:border-primary"
+            onKeyDown={(e) => e.key === "Enter" && !disabled && send()}
+          />
+          <button
+            onClick={() => send()}
+            disabled={disabled}
+            className="absolute right-2 top-2 p-1.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-sm">send</span>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
-

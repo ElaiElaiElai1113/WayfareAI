@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Wayfare AI | Your Personal Trip Planner</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0b50da",
+                        "background-light": "#f5f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .sand-ocean-gradient {
+            background: linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 30%, #a1c4fd 70%, #c2e9fb 100%);
+        }
+    </style>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased h-screen overflow-hidden">
+<div class="flex flex-col h-full sand-ocean-gradient">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between px-6 py-3 glass-card sticky top-0 z-50">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<div class="bg-primary p-1.5 rounded-lg text-white">
+<span class="material-symbols-outlined text-2xl">explore</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight text-slate-900">Wayfare AI</h1>
+</div>
+<div class="h-8 w-px bg-slate-300 mx-2"></div>
+<div class="flex items-center gap-3">
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Destination</span>
+<span class="text-sm font-bold">El Nido, Palawan</span>
+</div>
+<div class="flex items-center gap-2 bg-white/50 px-3 py-1 rounded-full border border-slate-200">
+<span class="material-symbols-outlined text-sm text-primary">calendar_today</span>
+<span class="text-xs font-medium">Oct 12 - 15</span>
+</div>
+<div class="flex items-center gap-2 bg-white/50 px-3 py-1 rounded-full border border-slate-200">
+<span class="material-symbols-outlined text-sm text-emerald-600">payments</span>
+<span class="text-xs font-medium">₱15,000</span>
+</div>
+<div class="flex items-center gap-2 bg-white/50 px-3 py-1 rounded-full border border-slate-200">
+<span class="material-symbols-outlined text-sm text-orange-500">eco</span>
+<span class="text-xs font-medium">Balanced</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<nav class="hidden md:flex items-center gap-6 mr-4">
+<a class="text-sm font-semibold text-primary border-b-2 border-primary pb-1" href="#">Itinerary</a>
+<a class="text-sm font-medium text-slate-600 hover:text-primary transition-colors" href="#">Map View</a>
+<a class="text-sm font-medium text-slate-600 hover:text-primary transition-colors" href="#">Expenses</a>
+</nav>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
+<span class="material-symbols-outlined text-sm">ios_share</span>
+<span>Share Trip</span>
+</button>
+<div class="size-10 rounded-full bg-slate-200 border-2 border-white overflow-hidden">
+<img alt="User Profile" data-alt="Abstract colorful geometric profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0BQyCbbFE7_OU2llcemXCVhsuVR2WZJF1LOra2LwBE2PEt75sz2ec43VLZQqQqWEqrhF8Lq2YLrjXP2eaVbqBJ7ojDgNEnrz5y_TqT8amr570HWAMmwO-Bm_QI7MCVUg6XZVKxF2gew8UTxxZRVgcIeDnJtgZziaw2B9LHH7CxfE6bFC4eqB9GbyZL53Rpwxhic0-dyG73Uq2Q09OXsP9wfgsexCOYSGh0e02jJ1UKyPwi5m4eOlIm-bdMhy1zGyheRuhCoLm5FA"/>
+</div>
+</div>
+</header>
+<main class="flex flex-1 overflow-hidden">
+<!-- Left Sidebar: Planner Settings -->
+<aside class="w-80 flex flex-col glass-card border-r border-slate-200 overflow-y-auto p-5 gap-6">
+<div>
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Plan Controls</h3>
+<div class="space-y-4">
+<div class="space-y-1.5">
+<label class="text-sm font-semibold ml-1">Location</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400">location_on</span>
+<input class="w-full pl-10 pr-4 py-2 bg-white/80 rounded-xl border-slate-200 focus:ring-primary focus:border-primary text-sm" placeholder="Search city..." type="text" value="El Nido, Palawan"/>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="text-sm font-semibold ml-1">Budget Range</label>
+<input class="w-full accent-primary h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" type="range"/>
+<div class="flex justify-between text-xs font-medium text-slate-500">
+<span>₱0</span>
+<span>₱15,000</span>
+<span>₱50k+</span>
+</div>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Intensity</h3>
+<div class="grid grid-cols-3 gap-2 p-1 bg-slate-200/50 rounded-xl">
+<button class="text-xs font-bold py-2 rounded-lg transition-all text-slate-600">Relaxed</button>
+<button class="text-xs font-bold py-2 rounded-lg bg-white shadow-sm text-primary">Balanced</button>
+<button class="text-xs font-bold py-2 rounded-lg transition-all text-slate-600">Packed</button>
+</div>
+</div>
+<div>
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Interests</h3>
+<div class="flex flex-wrap gap-2">
+<button class="px-3 py-1.5 rounded-full border border-primary bg-primary/10 text-primary text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">water_drop</span> Nature
+                        </button>
+<button class="px-3 py-1.5 rounded-full border border-slate-200 bg-white/50 text-slate-600 text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">museum</span> Culture
+                        </button>
+<button class="px-3 py-1.5 rounded-full border border-primary bg-primary/10 text-primary text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">restaurant</span> Foodie
+                        </button>
+<button class="px-3 py-1.5 rounded-full border border-slate-200 bg-white/50 text-slate-600 text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">nightlife</span> Nightlife
+                        </button>
+</div>
+</div>
+<div class="mt-auto">
+<button class="w-full py-4 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined">auto_fix_high</span>
+<span>Regenerate Plan</span>
+</button>
+</div>
+</aside>
+<!-- Center: Itinerary Timeline -->
+<section class="flex-1 overflow-y-auto p-8 space-y-8">
+<div class="max-w-3xl mx-auto space-y-6">
+<div class="flex items-center justify-between">
+<h2 class="text-2xl font-black tracking-tight flex items-center gap-3">
+                            Day 1: Arrival &amp; Coastal Bliss
+                            <span class="text-slate-400 font-medium text-lg">Oct 12</span>
+</h2>
+<button class="p-2 hover:bg-white/40 rounded-full text-slate-400 transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+<!-- Stop Card 1 -->
+<div class="relative pl-8 border-l-2 border-dashed border-primary/30">
+<div class="absolute -left-[9px] top-0 size-4 rounded-full bg-primary border-4 border-white"></div>
+<div class="glass-card rounded-2xl p-5 flex items-start justify-between group hover:shadow-xl transition-all">
+<div class="flex gap-4">
+<div class="size-16 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+<img alt="Lio Beach" data-alt="Pristine tropical beach with palm trees and clear water" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBk5HhBDMuj60jCGNVleUtAXVif-h4EFtZQeuwvKJtL_qdALHl21qe-i9njFpwYWxOeGucxTLdESK8xw35ej4cu9WxcgS9mO0MjGf-2eDlQcSh1CVJtMEdNkqZyglMwsRWGDLaWh6r9CAYLn8KV7nw0DCwteN2_6HoPOTi66RAg0yNOWGE3Eb5Z_IHDYWK43sXos7S9MJR3-8DCGWe2A58SJiA_9pjjE42Fu00De16Pq1QRW_jeIbpaPcja6S1SBn1OLVbtkhYunf0"/>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-xs font-black text-primary px-2 py-0.5 bg-primary/10 rounded-md">9:00 AM - 10:30 AM</span>
+<span class="material-symbols-outlined text-sm text-slate-400">landscape</span>
+</div>
+<h3 class="text-lg font-bold">Arrival at Lio Beach</h3>
+<p class="text-sm text-slate-500 line-clamp-2">Quick check-in and fresh coconut juice while watching the small planes land.</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-100 p-2 rounded-lg text-xs font-bold flex items-center gap-1 text-slate-600">
+<span class="material-symbols-outlined text-sm">swap_horiz</span> Swap
+                            </button>
+</div>
+</div>
+<!-- Travel Time -->
+<div class="flex items-center gap-3 py-2 px-8">
+<div class="h-px flex-1 bg-slate-200"></div>
+<div class="flex items-center gap-1.5 px-3 py-1 bg-white/40 border border-slate-200 rounded-full text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+<span class="material-symbols-outlined text-xs">directions_car</span> 15m Travel Time
+                        </div>
+<div class="h-px flex-1 bg-slate-200"></div>
+</div>
+<!-- Stop Card 2 -->
+<div class="relative pl-8 border-l-2 border-dashed border-primary/30">
+<div class="absolute -left-[9px] top-0 size-4 rounded-full bg-primary/40 border-4 border-white"></div>
+<div class="glass-card rounded-2xl p-5 flex items-start justify-between group hover:shadow-xl transition-all">
+<div class="flex gap-4">
+<div class="size-16 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+<img alt="Local Bistro" data-alt="Cozy open-air tropical restaurant with colorful decor" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDjMpwoPCUd-NHv1HPD9zkXC4MWxIa-x_X5O80ns9a18ZAVGzrFuXrhBOTtUsEqQ5l8qg4-C7csY3zMa9VjdT1Q4km71e0edbhWToUqo9WCJsFVSlPH6i_2yyr7npNi8dETPmAHTAELZy4bqifB82pe_mb4G4sHnH11Z6MW9op2JxOKGwaSNubJhAyNpdup1znILyBhWeokkjEFAk537qz8SYc-8GthtLbI6jWjfPmUiTk_MpRJW1lRkbSB4T-2biIOoHmS2VVQWz4"/>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-xs font-black text-primary px-2 py-0.5 bg-primary/10 rounded-md">11:00 AM - 12:30 PM</span>
+<span class="material-symbols-outlined text-sm text-slate-400">restaurant</span>
+</div>
+<h3 class="text-lg font-bold">Lunch at Trattoria Altrove</h3>
+<p class="text-sm text-slate-500 line-clamp-2">Famous firewood oven pizza in a relaxed garden setting. Must try the Carbonara.</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-100 p-2 rounded-lg text-xs font-bold flex items-center gap-1 text-slate-600">
+<span class="material-symbols-outlined text-sm">swap_horiz</span> Swap
+                            </button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-10">
+<h2 class="text-2xl font-black tracking-tight flex items-center gap-3">
+                            Day 2: Island Hopping Adventure
+                            <span class="text-slate-400 font-medium text-lg">Oct 13</span>
+</h2>
+</div>
+</div>
+</section>
+<!-- Right: Interactive Map & Chat Drawer -->
+<section class="w-[500px] relative border-l border-slate-200">
+<!-- Map Placeholder -->
+<div class="absolute inset-0 bg-slate-100">
+<div class="w-full h-full bg-cover bg-center opacity-80" data-location="El Nido, Philippines" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDmssmY2McF8Q-YRFVsGGgjkahwgUgTBzRfcNs4zLhcwoJIirZkR4BSsk3fUlPAL4xnDq-m_SeUih9VcjajDqe1Hg7ioCcH092hsUu1Qv34b6Jwz64DZCB7D678tNjMbCBczZ4MWXxLKDx6nA16Uzr80Hzy6pgM6PaTS52nKBE0tIhbrlpF1vOFwyIYdIBGMTzGz7GN2MPlAgulZbbw1YH23zMXunF9L8vkj2OSVm2-OAn_dES5ICD6PWbR2yf_RSLhkD0LH9SZTTk');"></div>
+<!-- Custom Markers (Simplified) -->
+<div class="absolute top-[30%] left-[40%] size-10 flex flex-col items-center">
+<div class="bg-primary text-white size-8 rounded-full border-4 border-white flex items-center justify-center shadow-lg">1</div>
+<div class="w-1 h-3 bg-white -mt-0.5"></div>
+</div>
+<div class="absolute top-[45%] left-[55%] size-10 flex flex-col items-center">
+<div class="bg-primary text-white size-8 rounded-full border-4 border-white flex items-center justify-center shadow-lg">2</div>
+<div class="w-1 h-3 bg-white -mt-0.5"></div>
+</div>
+</div>
+<!-- Chat Drawer -->
+<div class="absolute right-0 top-0 bottom-0 w-80 glass-card border-l border-white/50 flex flex-col shadow-2xl z-10">
+<div class="p-4 border-b border-slate-200 flex items-center gap-2">
+<div class="bg-primary/20 text-primary p-1.5 rounded-lg">
+<span class="material-symbols-outlined text-lg">smart_toy</span>
+</div>
+<h4 class="font-bold text-sm">Travel Assistant</h4>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-4">
+<div class="bg-white/60 p-3 rounded-2xl rounded-tl-none text-xs leading-relaxed border border-white">
+                            Hi! I've organized your El Nido trip to balance relaxation and exploration. Would you like me to adjust anything?
+                        </div>
+<div class="bg-primary text-white p-3 rounded-2xl rounded-tr-none text-xs ml-auto max-w-[80%]">
+                            Is Day 1 too busy?
+                        </div>
+<div class="bg-white/60 p-3 rounded-2xl rounded-tl-none text-xs leading-relaxed border border-white">
+                            Day 1 has 3 stops. We could drop the town tour if you want more beach time!
+                        </div>
+</div>
+<div class="p-4 space-y-3">
+<div class="flex flex-wrap gap-2">
+<button class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold hover:border-primary transition-colors">
+                                Less walking
+                            </button>
+<button class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold hover:border-primary transition-colors">
+                                Add more food
+                            </button>
+</div>
+<div class="relative">
+<input class="w-full pl-4 pr-10 py-3 bg-white rounded-xl border-slate-200 text-xs focus:ring-primary focus:border-primary" placeholder="Ask AI to change plan..." type="text"/>
+<button class="absolute right-2 top-2 p-1.5 bg-primary text-white rounded-lg">
+<span class="material-symbols-outlined text-sm">send</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+</body></html>

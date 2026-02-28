@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0b50da",
+                        "background-light": "#f5f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen flex-col max-w-md mx-auto bg-white dark:bg-background-dark shadow-2xl overflow-hidden">
+<!-- Header -->
+<header class="sticky top-0 z-30 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 pt-6 pb-4">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-3">
+<div class="p-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-2xl">location_on</span>
+</div>
+<div>
+<h1 class="text-xl font-bold tracking-tight">Paris, France</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Oct 12 — Oct 18 • 2 Guests</p>
+</div>
+</div>
+<button class="size-10 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">search</span>
+</button>
+</div>
+<!-- Condensed Filters -->
+<div class="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-white px-4 text-sm font-semibold">
+<span class="material-symbols-outlined text-sm">calendar_today</span>
+<span>Day 1</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 text-sm font-medium border border-slate-200 dark:border-slate-700">
+<span>Day 2</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 text-sm font-medium border border-slate-200 dark:border-slate-700">
+<span>Day 3</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 text-sm font-medium border border-slate-200 dark:border-slate-700">
+<span class="material-symbols-outlined text-sm">tune</span>
+<span>Filters</span>
+</button>
+</div>
+</header>
+<!-- Main Content (Itinerary) -->
+<main class="flex-1 px-4 py-6 space-y-8 pb-32">
+<!-- Morning Section -->
+<section>
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Morning</h2>
+<span class="h-px flex-1 bg-slate-100 dark:bg-slate-800 ml-4"></span>
+</div>
+<div class="space-y-4">
+<!-- Stop 1 -->
+<div class="group relative flex gap-4 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+<div class="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl">
+<img class="h-full w-full object-cover" data-alt="The Eiffel Tower in Paris" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBhWP92Anyot1PrKbi4c2WCkzHg1IHhPwVGL61IwodrA3hH7Ujyi2TKqja2u8ibSwv6SyKvWEJhkN6wIuePo9RfT7R4-oV4Q4v2b6FHHhSMPCO9xx4Rc3o3vuxawvD6MawrKtmLygAWbGtRALDJqduNk0VCu98-yfttvgtQyldnnJfM9gID9vr4ZNxUekpJNrVHbhkpKHA-AH0KZm7kdU2Qn31Z7Ti9mY7vev346MeQWXfDx2NPiIT028dFTk9CChOD1SkLmX8NFls"/>
+<div class="absolute top-1 right-1 bg-white/90 dark:bg-slate-900/90 rounded-lg px-1.5 py-0.5 text-[10px] font-bold text-primary shadow-sm">
+                                09:30
+                            </div>
+</div>
+<div class="flex flex-col justify-between py-1 flex-1">
+<div>
+<h3 class="font-bold text-slate-900 dark:text-slate-100 leading-tight">Eiffel Tower Summit</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">Pre-booked skip the line entry. Best views of the city.</p>
+</div>
+<div class="flex items-center gap-3 text-[11px] font-semibold text-primary">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">schedule</span> 2h 30m</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">star</span> 4.8</span>
+</div>
+</div>
+<button class="self-start text-slate-300 dark:text-slate-600">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Transit -->
+<div class="flex items-center gap-3 ml-12 py-1 text-slate-400 dark:text-slate-500">
+<div class="w-px h-8 bg-dashed bg-slate-200 dark:bg-slate-800 border-l-2 border-dashed"></div>
+<span class="material-symbols-outlined text-lg">directions_walk</span>
+<span class="text-[11px] font-medium">12 min walk (0.8 km)</span>
+</div>
+<!-- Stop 2 -->
+<div class="group relative flex gap-4 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
+<div class="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl">
+<img class="h-full w-full object-cover" data-alt="A classic Parisian cafe terrace" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDqAxfdJbRyG0aiEmvJBd3Vz1nJw3ZpBfEAykK_fdHpjU4Y9sVNDOwzzQ8zoZVCQ4YGUz0NmT_Ua_AeIv073bB8INggjA37Kb28gliseBDzrLqluZ8rNDbj9ymcqp_ybgPbC0q6eVbu-JsryLKYbh6sAjKaOXzVH_HVWe601eYFRunbbDTHL_C86SWH3wJT1ber8ag0X-HNjeQ2FV-2oxB3TjuSBr8DM29yVgepLNN3KYkIHIpESq73iSVtVc15tlLqcQynHjI4YXk"/>
+<div class="absolute top-1 right-1 bg-white/90 dark:bg-slate-900/90 rounded-lg px-1.5 py-0.5 text-[10px] font-bold text-primary shadow-sm">
+                                12:00
+                            </div>
+</div>
+<div class="flex flex-col justify-between py-1 flex-1">
+<div>
+<h3 class="font-bold text-slate-900 dark:text-slate-100 leading-tight">Cafe de l'Homme</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">Lunch with panoramic views of the Trocadero gardens.</p>
+</div>
+<div class="flex items-center gap-3 text-[11px] font-semibold text-slate-400">
+<span class="flex items-center gap-1 text-primary"><span class="material-symbols-outlined text-xs">restaurant</span> Lunch</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">payments</span> $$$</span>
+</div>
+</div>
+<button class="self-start text-slate-300 dark:text-slate-600">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Afternoon Section -->
+<section>
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Afternoon</h2>
+<span class="h-px flex-1 bg-slate-100 dark:bg-slate-800 ml-4"></span>
+</div>
+<div class="space-y-4">
+<!-- Stop 3 -->
+<div class="group relative flex gap-4 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
+<div class="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl">
+<img class="h-full w-full object-cover" data-alt="The Louvre Pyramid at daytime" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8FfXpIz4AuOfbGqNBEaeSDeIy56w1vqp1G6VEpfHl_8PxLC08VJmOh8ix1lbqUvP0mtrML6-leWR3Gyw-3lrHa54yzDH4x63hL51BI29PCdEURqTMrwxRuIIoWx-DywU00AnaDC2xuNt7Ez3AkQuBrZ1keXdxnR_kf_CQRY95c_IGRoUlSkychCZ0PLAgybBD7QAcfxLQl4AYOxcxvWFY5J9o_kZW0m5G49Aq_u9Ow6ZAdKvc6jzjacj6br-aGGLUHgAWbeyBDQI"/>
+<div class="absolute top-1 right-1 bg-white/90 dark:bg-slate-900/90 rounded-lg px-1.5 py-0.5 text-[10px] font-bold text-primary shadow-sm">
+                                14:30
+                            </div>
+</div>
+<div class="flex flex-col justify-between py-1 flex-1">
+<div>
+<h3 class="font-bold text-slate-900 dark:text-slate-100 leading-tight">Louvre Museum</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">World's largest art museum and a historic monument.</p>
+</div>
+<div class="flex items-center gap-3 text-[11px] font-semibold text-primary">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">schedule</span> 3h 00m</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">confirmation_number</span> Ticket Required</span>
+</div>
+</div>
+<button class="self-start text-slate-300 dark:text-slate-600">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Map Toggle -->
+<div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-40">
+<button class="flex items-center gap-2 bg-slate-900 dark:bg-primary text-white px-6 py-3 rounded-full shadow-xl shadow-primary/20 hover:scale-105 transition-transform">
+<span class="material-symbols-outlined">map</span>
+<span class="text-sm font-bold tracking-wide">View Map</span>
+</button>
+</div>
+<!-- Bottom Navigation -->
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/90 dark:bg-background-dark/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 px-6 pt-3 pb-8 z-50">
+<div class="flex justify-between items-center">
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Plan</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined text-2xl">explore</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Explore</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<div class="relative">
+<span class="material-symbols-outlined text-2xl">chat_bubble</span>
+<div class="absolute -top-1 -right-1 size-2 bg-primary rounded-full border-2 border-white dark:border-background-dark"></div>
+</div>
+<span class="text-[10px] font-bold uppercase tracking-wider">Chat</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined text-2xl">person</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Profile</span>
+</a>
+</div>
+</nav>
+</div>
+</body></html>
