@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -21,6 +21,10 @@ export function AssistantDrawer({ itinerary, onUpdateItinerary, openDefault }: {
   const [loading, setLoading] = useState(false);
 
   const disabled = useMemo(() => !itinerary || loading || !input.trim(), [itinerary, input, loading]);
+
+  useEffect(() => {
+    setOpen(Boolean(openDefault));
+  }, [openDefault]);
 
   const send = async (content?: string) => {
     if (!itinerary) return;

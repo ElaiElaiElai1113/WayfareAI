@@ -148,7 +148,7 @@ export default function App() {
           onClick={() => setTab("plan")}
         >
           <span className="material-symbols-outlined text-sm">calendar_today</span>
-          <span>Day 1</span>
+          <span>Plan</span>
         </button>
         <button
           className={`flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium ${
@@ -156,7 +156,7 @@ export default function App() {
           }`}
           onClick={() => setTab("map")}
         >
-          Day 2
+          Map
         </button>
         <button
           className={`flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium ${
@@ -165,7 +165,7 @@ export default function App() {
           onClick={() => setTab("chat")}
         >
           <span className="material-symbols-outlined text-sm">tune</span>
-          <span>Map</span>
+          <span>Chat</span>
         </button>
       </div>
 

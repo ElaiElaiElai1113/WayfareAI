@@ -13,7 +13,7 @@ export function MapPanel({ itinerary }: { itinerary: Itinerary | null }) {
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    mapRef.current = new maplibregl.Map({
+    const map = new maplibregl.Map({
       container: mapContainer.current,
       style: {
         version: 8,
@@ -25,25 +25,29 @@ export function MapPanel({ itinerary }: { itinerary: Itinerary | null }) {
       attributionControl: false,
     });
 
-    mapRef.current.on("load", () => setMapLoaded(true));
+    mapRef.current = map;
+    map.on("load", () => {
+      if (!map.getSource("osm")) {
+        map.addSource("osm", {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "&copy; OpenStreetMap"
+        });
+      }
 
-    // Custom map style to match the design
-    if (mapRef.current) {
-      mapRef.current.addSource('osm', {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '&copy; OpenStreetMap'
-      });
+      if (!map.getLayer("osm-tiles")) {
+        map.addLayer({
+          id: "osm-tiles",
+          type: "raster",
+          source: "osm",
+          minzoom: 0,
+          maxzoom: 19
+        });
+      }
 
-      mapRef.current.addLayer({
-        id: 'osm-tiles',
-        type: 'raster',
-        source: 'osm',
-        minzoom: 0,
-        maxzoom: 19
-      });
-    }
+      setMapLoaded(true);
+    });
 
     return () => {
       mapRef.current?.remove();
