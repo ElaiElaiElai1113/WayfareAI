@@ -1,20 +1,21 @@
 ﻿import { useMemo, useState } from "react";
-import { MessageCircle, Send, Wrench } from "lucide-react";
+import { MessageCircle, Send, RotateCcw, RefreshCw, DollarSign, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { streamChat } from "@/lib/api";
 import type { Itinerary } from "@/types/itinerary";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const QUICK_ACTIONS = [
-  "replan_day(1)",
-  "swap_stop(stop_1)",
-  "suggest_nearby(cafes,2000)",
-  "adjust_budget(300)",
-  "change_pace(Relaxed)"
+  { label: "Replan Day 1", icon: RotateCcw, command: "replan_day(1)" },
+  { label: "Swap Stop", icon: RefreshCw, command: "swap_stop(stop_1)" },
+  { label: "Find Cafes", icon: MessageCircle, command: "suggest_nearby(cafes,2000)" },
+  { label: "Adjust Budget", icon: DollarSign, command: "adjust_budget(300)" },
+  { label: "Relaxed Pace", icon: Gauge, command: "change_pace(Relaxed)" }
 ];
 
 export function AssistantDrawer({ itinerary, onUpdateItinerary, openDefault }: { itinerary: Itinerary | null; onUpdateItinerary: (next: Itinerary) => void; openDefault?: boolean }) {
@@ -32,7 +33,11 @@ export function AssistantDrawer({ itinerary, onUpdateItinerary, openDefault }: {
 
     setLoading(true);
     setInput("");
-    const nextMessages = [...messages, { role: "user", content: messageText }, { role: "assistant", content: "" }];
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      { role: "user", content: messageText },
+      { role: "assistant", content: "" }
+    ];
     setMessages(nextMessages);
 
     try {
@@ -71,26 +76,55 @@ export function AssistantDrawer({ itinerary, onUpdateItinerary, openDefault }: {
           </div>
 
           <div className="mb-2 flex flex-wrap gap-2">
-            {QUICK_ACTIONS.map((action) => (
-              <button key={action} className="rounded-full bg-white/70 px-3 py-1 text-xs text-slate-700" onClick={() => send(action)}>
-                <Wrench className="mr-1 inline h-3.5 w-3.5" />{action}
-              </button>
-            ))}
+            <TooltipProvider>
+              {QUICK_ACTIONS.map((action) => (
+                <Tooltip key={action.command}>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:bg-white/90 hover:shadow-md"
+                      onClick={() => send(action.command)}
+                    >
+                      <action.icon className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{action.label}</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" sideOffset={8}>
+                    {action.command}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </TooltipProvider>
           </div>
 
           <div className="h-[calc(100%-7.5rem)] overflow-y-auto rounded-xl bg-white/45 p-3">
-            {messages.length === 0 ? <p className="text-sm text-slate-600">Ask for swaps, budget edits, or day replans.</p> : null}
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                <MessageCircle className="h-10 w-10 text-slate-400" />
+                <p className="text-sm text-slate-600">Ask for swaps, budget edits, or day replans.</p>
+              </div>
+            ) : null}
             {messages.map((message, idx) => (
-              <div key={idx} className={`mb-2 rounded-xl px-3 py-2 text-sm ${message.role === "user" ? "ml-8 bg-primary text-white" : "mr-8 bg-white/80 text-slate-700"}`}>
+              <div
+                key={idx}
+                className={`mb-3 rounded-2xl px-4 py-3 text-sm ${
+                  message.role === "user"
+                    ? "ml-auto bg-primary text-white shadow-md max-w-[85%]"
+                    : "mr-auto bg-white/90 text-slate-700 shadow-sm max-w-[90%]"
+                }`}
+              >
                 {message.content}
               </div>
             ))}
           </div>
 
           <div className="mt-2 flex gap-2">
-            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask Wayfare Assistant" onKeyDown={(e) => e.key === "Enter" && send()} />
+            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask Wayfare Assistant..." onKeyDown={(e) => e.key === "Enter" && !disabled && send()} />
             <Button onClick={() => send()} disabled={disabled}>
-              <Send className="h-4 w-4" />
+              {loading ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </Card>

@@ -4,17 +4,20 @@ import { PlannerForm } from "@/components/PlannerForm";
 import { TimelinePanel } from "@/components/TimelinePanel";
 import { MapPanel } from "@/components/MapPanel";
 import { AssistantDrawer } from "@/components/AssistantDrawer";
+import { Toaster } from "@/components/ui/toaster";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ItinerarySkeleton, MapSkeleton } from "@/components/ItinerarySkeleton";
 import type { Itinerary, PlanRequest } from "@/types/itinerary";
 import { postPlan, postShare } from "@/lib/api";
 
 export default function App() {
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState("plan");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const summary = useMemo(() => {
     if (!itinerary) return "Smarter routes. Better journeys.";
@@ -24,12 +27,21 @@ export default function App() {
   const onPlan = async (payload: PlanRequest) => {
     try {
       setLoading(true);
-      setError(null);
       setShareUrl(null);
       const planned = await postPlan(payload);
       setItinerary(planned);
+      toast({
+        title: "Itinerary Generated!",
+        description: `${planned.city} · ${planned.days.length} days planned`,
+        variant: "success"
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate itinerary");
+      const message = e instanceof Error ? e.message : "Failed to generate itinerary";
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -37,8 +49,22 @@ export default function App() {
 
   const onShare = async () => {
     if (!itinerary) return;
-    const result = await postShare(itinerary);
-    setShareUrl(result.url);
+    try {
+      const result = await postShare(itinerary);
+      setShareUrl(result.url);
+      toast({
+        title: "Link Created!",
+        description: "Share URL copied to clipboard",
+        variant: "success"
+      });
+      await navigator.clipboard.writeText(result.url);
+    } catch (e) {
+      toast({
+        title: "Share Failed",
+        description: e instanceof Error ? e.message : "Failed to create share link",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -64,8 +90,6 @@ export default function App() {
 
       <PlannerForm onSubmit={onPlan} loading={loading} />
 
-      {error && <p className="mt-4 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-700">{error}</p>}
-
       <div className="mt-6 md:hidden">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="grid grid-cols-3">
@@ -78,10 +102,10 @@ export default function App() {
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <section className={`${tab === "map" ? "hidden md:block" : "block"}`}>
-          <TimelinePanel itinerary={itinerary} onUpdate={setItinerary} />
+          {loading ? <ItinerarySkeleton /> : <TimelinePanel itinerary={itinerary} onUpdate={setItinerary} />}
         </section>
         <section className={`${tab === "plan" ? "hidden md:block" : "block"}`}>
-          <MapPanel itinerary={itinerary} />
+          {loading ? <MapSkeleton /> : <MapPanel itinerary={itinerary} />}
         </section>
       </div>
 
@@ -90,6 +114,7 @@ export default function App() {
         onUpdateItinerary={setItinerary}
         openDefault={tab === "chat"}
       />
+      <Toaster />
     </div>
   );
 }

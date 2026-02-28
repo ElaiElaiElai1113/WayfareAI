@@ -4,22 +4,63 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getCategoryIcon, getCategoryColor } from "@/lib/category-icons";
 import type { Itinerary, Stop } from "@/types/itinerary";
 import { postChat, postPlan } from "@/lib/api";
 
 function StopRow({ stop, index, onSwap }: { stop: Stop; index: number; onSwap: (stop: Stop) => void }) {
+  const CategoryIcon = getCategoryIcon(stop.category);
+  const categoryColor = getCategoryColor(stop.category);
+
   return (
-    <div className="mb-2 rounded-xl border border-white/60 bg-white/55 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-sm text-slate-500">#{index + 1} · {stop.startTime}</p>
+    <div className="mb-2 rounded-xl border border-white/60 bg-white/55 p-3 transition-all hover:border-white/80 hover:bg-white/65">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-xs font-medium text-slate-500">#{index + 1}</p>
+            <p className="text-xs text-slate-500">·</p>
+            <p className="text-xs font-medium text-slate-500">{stop.startTime}</p>
+          </div>
           <p className="font-medium text-slate-800">{stop.name}</p>
-          <p className="text-sm text-slate-600">{stop.category}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${categoryColor}`}>
+              <CategoryIcon className="h-3 w-3" />
+              {stop.category}
+            </span>
+            {stop.notes && (
+              <span className="text-xs text-slate-500 italic">{stop.notes}</span>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <Badge>{stop.travelMinutesFromPrev} min travel</Badge>
-          <Badge>${stop.estimatedCost.toFixed(0)}</Badge>
-          <Button size="sm" variant="ghost" onClick={() => onSwap(stop)}>Swap</Button>
+        <div className="flex flex-col items-end gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="border-white/50">
+                {stop.travelMinutesFromPrev} min
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>Travel time from previous stop</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="border-white/50">
+                {stop.durationMinutes} min
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>Duration at this location</TooltipContent>
+          </Tooltip>
+          <Badge variant="outline" className="border-white/50">
+            ${stop.estimatedCost.toFixed(0)}
+          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="ghost" onClick={() => onSwap(stop)}>
+                Swap
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Find nearby alternative</TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>
@@ -62,7 +103,7 @@ export function TimelinePanel({ itinerary, onUpdate }: { itinerary: Itinerary | 
     <Card>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-2xl text-slate-800">Timeline</h2>
-        <Badge>Running total: {itinerary.currency} {runningTotal.toFixed(0)}</Badge>
+        <Badge variant="success" className="text-sm">Running total: {itinerary.currency} {runningTotal.toFixed(0)}</Badge>
       </div>
 
       <Accordion type="single" collapsible defaultValue="day-1" className="space-y-2">
@@ -77,8 +118,8 @@ export function TimelinePanel({ itinerary, onUpdate }: { itinerary: Itinerary | 
             <AccordionContent>
               <p className="mb-3 text-sm text-slate-700">{day.explanation}</p>
               {day.stops.map((stop, index) => <StopRow key={stop.id} stop={stop} index={index} onSwap={(selected) => { setSelectedStop(selected); setSwapOpen(true); }} />)}
-              <div className="mt-3 flex justify-between">
-                <Badge>Day cost: {itinerary.currency} {day.dayCost.toFixed(0)}</Badge>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <Badge variant="success">Day cost: {itinerary.currency} {day.dayCost.toFixed(0)}</Badge>
                 <Button size="sm" variant="secondary" onClick={() => replanDay(day.dayNumber)}>Replan day</Button>
               </div>
             </AccordionContent>
