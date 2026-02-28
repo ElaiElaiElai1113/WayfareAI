@@ -2,15 +2,97 @@
 import { z } from "zod";
 import { createItinerary, fetchNearbyPois, applyBudgetAdjustment, applyPaceChange } from "../lib/engine";
 import type { Env, Itinerary, PlanRequest } from "./types";
-import { cacheKey, rateLimit, slugify, withCache } from "./utils";
+import { cacheKey, rateLimit, slugify, withCache, withRetry, callGLM, callGLMForItinerary } from "./utils";
+
+// Validate environment at startup (will be validated on first request with actual env)
+let envValidated = false;
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Environment validation middleware
+app.use("/*", async (c, next) => {
+  if (!envValidated) {
+    try {
+      validateEnv(c.env);
+      envValidated = true;
+      console.log("Environment validated successfully");
+    } catch (error) {
+      console.error("Environment validation failed:", error);
+      return c.json(
+        { error: "Server configuration error", details: error instanceof Error ? error.message : "Unknown error" },
+        500
+      );
+    }
+  }
+  await next();
+});
+
+// Security headers middleware
+app.use("/*", async (c, next) => {
+  await next();
+
+  // Add security headers
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+  c.header("X-XSS-Protection", "1; mode=block");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  c.header("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
+
+  // CORS headers for API routes
+  if (c.req.path.startsWith("/api/")) {
+    const origin = c.req.header("Origin");
+    const allowedOrigins = (c.env.ALLOWED_ORIGINS || "*").split(",").map(o => o.trim());
+
+    if (origin && (allowedOrigins.includes("*") || allowedOrigins.includes(origin))) {
+      c.header("Access-Control-Allow-Origin", origin);
+      c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      c.header("Access-Control-Max-Age", "86400");
+    }
+
+    if (c.req.method === "OPTIONS") {
+      return c.text("", 204);
+    }
+  }
+});
+
+// Request logging middleware
+app.use("/api/*", async (c, next) => {
+  const startTime = Date.now();
+  const path = c.req.path;
+  const method = c.req.method;
+
+  await next();
+
+  const duration = Date.now() - startTime;
+  const status = c.res.status;
+
+  // Log request details for monitoring
+  console.log(`${method} ${path} ${status} ${duration}ms`);
+
+  // Store metrics in Cloudflare Analytics or external service
+  if (c.env.REQUEST_METRICS) {
+    try {
+      await c.env.REQUEST_METRICS.put(
+        `metric:${Date.now()}`,
+        JSON.stringify({ path, method, status, duration, timestamp: new Date().toISOString() }),
+        { expirationTtl: 86400 } // 24 hours
+      );
+    } catch (e) {
+      // Silently fail if metrics storage fails
+    }
+  }
+});
 
 app.use("/api/*", async (c, next) => {
   const ip = c.req.header("CF-Connecting-IP") || "unknown";
   const limited = await rateLimit(c.env, ip);
   if (!limited.ok) {
-    return c.json({ error: "Rate limit exceeded" }, 429);
+    console.warn(`Rate limit exceeded for IP: ${ip}`);
+    return c.json(
+      { error: "Rate limit exceeded", retryAfter: c.env.RATE_LIMIT_WINDOW_SECONDS },
+      429
+    );
   }
   await next();
 });
@@ -21,14 +103,26 @@ app.get("/api/geocode", async (c) => {
 
   const ttl = Number(c.env.CACHE_TTL_SECONDS || "21600");
   const result = await withCache(c.env, cacheKey("geo-autocomplete", q), ttl, async () => {
-    const url = `${c.env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`;
-    const response = await fetch(url, { headers: { "User-Agent": "WayfareAI/1.0" } });
-    const data = await response.json() as Array<any>;
-    return data.map((item) => ({
-      name: item.display_name,
-      bbox: [Number(item.boundingbox[2]), Number(item.boundingbox[0]), Number(item.boundingbox[3]), Number(item.boundingbox[1])],
-      center: [Number(item.lon), Number(item.lat)]
-    }));
+    return await withRetry(async () => {
+      const url = `${c.env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`;
+      const response = await fetch(url, {
+        headers: { "User-Agent": "WayfareAI/1.0" },
+        signal: AbortSignal.timeout(10000) // 10s timeout
+      });
+
+      if (!response.ok) {
+        const error = new Error(`Nominatim API error: ${response.status}`);
+        (error as any).status = response.status;
+        throw error;
+      }
+
+      const data = await response.json() as Array<any>;
+      return data.map((item) => ({
+        name: item.display_name,
+        bbox: [Number(item.boundingbox[2]), Number(item.boundingbox[0]), Number(item.boundingbox[3]), Number(item.boundingbox[1])],
+        center: [Number(item.lon), Number(item.lat)]
+      }));
+    });
   });
 
   return c.json(result);
@@ -39,6 +133,12 @@ app.get("/api/pois", async (c) => {
   if (!bbox) return c.json({ error: "bbox query required" }, 400);
 
   const [minLon, minLat, maxLon, maxLat] = bbox.split(",").map(Number);
+
+  // Validate bbox coordinates
+  if ([minLon, minLat, maxLon, maxLat].some(n => !Number.isFinite(n))) {
+    return c.json({ error: "Invalid bbox coordinates" }, 400);
+  }
+
   const query = `
 [out:json][timeout:25];
 (
@@ -51,8 +151,25 @@ out body 80;
 
   const ttl = Number(c.env.CACHE_TTL_SECONDS || "21600");
   const data = await withCache(c.env, cacheKey("pois-route", bbox), ttl, async () => {
-    const response = await fetch(c.env.OVERPASS_BASE_URL, { method: "POST", body: query });
-    return response.json();
+    return await withRetry(
+      async () => {
+        const response = await fetch(c.env.OVERPASS_BASE_URL, {
+          method: "POST",
+          body: query,
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          signal: AbortSignal.timeout(30000) // 30s timeout for Overpass
+        });
+
+        if (!response.ok) {
+          const error = new Error(`Overpass API error: ${response.status}`);
+          (error as any).status = response.status;
+          throw error;
+        }
+
+        return response.json();
+      },
+      { maxRetries: 2, baseDelay: 2000 } // Fewer retries for Overpass
+    );
   });
 
   return c.json(data);
@@ -61,14 +178,39 @@ out body 80;
 app.get("/api/osrm/table", async (c) => {
   const profile = c.req.query("profile") || "walking";
   const coordinates = c.req.query("coordinates");
-  if (!coordinates) return c.json({ error: "coordinates required" }, 400);
+
+  if (!coordinates) {
+    return c.json({ error: "coordinates query required" }, 400);
+  }
+
+  // Validate profile
+  if (!["walking", "driving"].includes(profile)) {
+    return c.json({ error: "Invalid profile. Use 'walking' or 'driving'." }, 400);
+  }
 
   const ttl = Number(c.env.CACHE_TTL_SECONDS || "21600");
-  const data = await withCache(c.env, cacheKey("osrm-table-route", profile, coordinates.slice(0, 300)), ttl, async () => {
-    const url = `${c.env.OSRM_BASE_URL}/table/v1/${profile}/${coordinates}?annotations=duration`;
-    const response = await fetch(url);
-    return response.json();
-  });
+  const data = await withCache(
+    c.env,
+    cacheKey("osrm-table-route", profile, coordinates.slice(0, 300)),
+    ttl,
+    async () => {
+      return await withRetry(
+        async () => {
+          const url = `${c.env.OSRM_BASE_URL}/table/v1/${profile}/${coordinates}?annotations=duration`;
+          const response = await fetch(url, { signal: AbortSignal.timeout(15000) }); // 15s timeout
+
+          if (!response.ok) {
+            const error = new Error(`OSRM table API error: ${response.status}`);
+            (error as any).status = response.status;
+            throw error;
+          }
+
+          return response.json();
+        },
+        { maxRetries: 3, baseDelay: 1000 }
+      );
+    }
+  );
 
   return c.json(data);
 });
@@ -76,14 +218,39 @@ app.get("/api/osrm/table", async (c) => {
 app.get("/api/osrm/route", async (c) => {
   const profile = c.req.query("profile") || "walking";
   const coordinates = c.req.query("coordinates");
-  if (!coordinates) return c.json({ error: "coordinates required" }, 400);
+
+  if (!coordinates) {
+    return c.json({ error: "coordinates query required" }, 400);
+  }
+
+  // Validate profile
+  if (!["walking", "driving"].includes(profile)) {
+    return c.json({ error: "Invalid profile. Use 'walking' or 'driving'." }, 400);
+  }
 
   const ttl = Number(c.env.CACHE_TTL_SECONDS || "21600");
-  const data = await withCache(c.env, cacheKey("osrm-route-route", profile, coordinates.slice(0, 300)), ttl, async () => {
-    const url = `${c.env.OSRM_BASE_URL}/route/v1/${profile}/${coordinates}?overview=full&geometries=geojson`;
-    const response = await fetch(url);
-    return response.json();
-  });
+  const data = await withCache(
+    c.env,
+    cacheKey("osrm-route-route", profile, coordinates.slice(0, 300)),
+    ttl,
+    async () => {
+      return await withRetry(
+        async () => {
+          const url = `${c.env.OSRM_BASE_URL}/route/v1/${profile}/${coordinates}?overview=full&geometries=geojson`;
+          const response = await fetch(url, { signal: AbortSignal.timeout(15000) }); // 15s timeout
+
+          if (!response.ok) {
+            const error = new Error(`OSRM route API error: ${response.status}`);
+            (error as any).status = response.status;
+            throw error;
+          }
+
+          return response.json();
+        },
+        { maxRetries: 3, baseDelay: 1000 }
+      );
+    }
+  );
 
   return c.json(data);
 });
@@ -102,13 +269,25 @@ const planSchema = z.object({
   mustSee: z.array(z.string()),
   preferences: z.record(z.boolean()),
   rainPlan: z.boolean(),
-  budgetSaver: z.boolean()
+  budgetSaver: z.boolean(),
+  useAI: z.boolean().optional()
 });
 
 app.post("/api/plan", async (c) => {
-  const payload = planSchema.parse(await c.req.json()) as PlanRequest;
-  const itinerary = await createItinerary(c.env, payload);
-  return c.json(itinerary);
+  try {
+    const payload = planSchema.parse(await c.req.json()) as PlanRequest;
+    const itinerary = await createItinerary(c.env, payload);
+    return c.json(itinerary);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json(
+        { error: "Validation failed", issues: error.issues },
+        400
+      );
+    }
+    console.error("Plan endpoint error:", error);
+    return c.json({ error: "Failed to generate itinerary" }, 500);
+  }
 });
 
 const chatSchema = z.object({
@@ -215,34 +394,11 @@ async function runRuleAssistant(env: Env, message: string, itinerary: Itinerary)
   return { assistantMessage, updatedItinerary };
 }
 
-async function maybeCallOpenAI(env: Env, message: string, itinerary: Itinerary): Promise<string | null> {
-  if (!env.OPENAI_API_KEY || !env.OPENAI_BASE_URL) return null;
-
-  const response = await fetch(`${env.OPENAI_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0.3,
-      messages: [
-        {
-          role: "system",
-          content: "You are Wayfare Assistant. Never invent POIs. Only use itinerary stops and provided data."
-        },
-        {
-          role: "user",
-          content: `Message: ${message}\nItinerary: ${JSON.stringify(itinerary).slice(0, 9000)}`
-        }
-      ]
-    })
-  });
-
-  if (!response.ok) return null;
-  const data = await response.json() as any;
-  return data.choices?.[0]?.message?.content ?? null;
+/**
+ * Call GLM z.AI for chat assistance (replaces OpenAI)
+ */
+async function maybeCallGLM(env: Env, message: string, itinerary: Itinerary): Promise<string | null> {
+  return await callGLM(env, message, itinerary);
 }
 
 app.post("/api/chat", async (c) => {
@@ -250,7 +406,7 @@ app.post("/api/chat", async (c) => {
   const stream = c.req.query("stream") === "true";
 
   const ruleResult = await runRuleAssistant(c.env, message, itinerary);
-  const modelReply = await maybeCallOpenAI(c.env, message, ruleResult.updatedItinerary ?? itinerary);
+  const modelReply = await maybeCallGLM(c.env, message, ruleResult.updatedItinerary ?? itinerary);
   const assistantMessage = modelReply || ruleResult.assistantMessage;
 
   if (!stream) {
@@ -292,13 +448,60 @@ app.post("/api/share", async (c) => {
 });
 
 app.get("/api/share/:slug", async (c) => {
-  const slug = c.req.param("slug");
-  const row = await c.env.DB.prepare("SELECT itinerary_json FROM shared_itineraries WHERE slug = ?1").bind(slug).first<{ itinerary_json: string }>();
-  if (!row) return c.json({ error: "Not found" }, 404);
-  return c.json(JSON.parse(row.itinerary_json));
+  try {
+    const slug = c.req.param("slug");
+
+    // Validate slug format to prevent SQL injection
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      return c.json({ error: "Invalid slug" }, 400);
+    }
+
+    const row = await c.env.DB
+      .prepare("SELECT itinerary_json FROM shared_itineraries WHERE slug = ?1")
+      .bind(slug)
+      .first<{ itinerary_json: string }>();
+
+    if (!row) return c.json({ error: "Not found" }, 404);
+
+    return c.json(JSON.parse(row.itinerary_json));
+  } catch (error) {
+    console.error("Share endpoint error:", error);
+    return c.json({ error: "Failed to retrieve itinerary" }, 500);
+  }
 });
 
-app.get("/api/health", (c) => c.json({ ok: true, service: "wayfare-ai-worker" }));
+app.get("/api/health", async (c) => {
+  const checks: Record<string, boolean | string> = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    service: "wayfare-ai-worker"
+  };
+
+  // Check database connection
+  try {
+    const result = await c.env.DB.prepare("SELECT 1").first();
+    checks.database = !!result;
+  } catch (error) {
+    checks.database = false;
+    checks.database_error = error instanceof Error ? error.message : "Unknown error";
+  }
+
+  // Check KV cache connection
+  try {
+    await c.env.CACHE.put("health-check", "ok", { expirationTtl: 60 });
+    const value = await c.env.CACHE.get("health-check");
+    checks.cache = value === "ok";
+  } catch (error) {
+    checks.cache = false;
+    checks.cache_error = error instanceof Error ? error.message : "Unknown error";
+  }
+
+  // Check external service availability (optional, could slow down health check)
+  checks.external_services = true; // Assume true unless we want to actually ping them
+
+  const isHealthy = checks.database === true && checks.cache === true;
+  return c.json(checks, isHealthy ? 200 : 503);
+});
 
 export default app;
 

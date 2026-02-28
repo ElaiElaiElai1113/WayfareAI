@@ -1,5 +1,5 @@
 ﻿import type { Env, GeocodeResult, Itinerary, PlanRequest, Poi, Stop, TransportMode, TravelStyle } from "../src/types";
-import { cacheKey, fromTime, toTime, withCache } from "../src/utils";
+import { cacheKey, fromTime, toTime, withCache, callGLMForItinerary } from "../src/utils";
 
 const DEFAULT_POI_COST: Record<string, number> = {
   museum: 18,
@@ -252,6 +252,114 @@ function durationForStyle(style: TravelStyle, category: string) {
   return baseline;
 }
 
+/**
+ * Enrich POIs with AI-powered suggestions
+ * @param env - Cloudflare environment
+ * @param pois - All available POIs
+ * @param request - User plan request
+ * @returns AI response with enrichment suggestions
+ */
+async function enrichPoisWithAI(
+  env: Env,
+  pois: Poi[],
+  request: { city: string; days: number; travelStyle: TravelStyle; preferences: Record<string, boolean>; useAI?: boolean }
+): Promise<{
+  enhancedPois: Poi[];
+  dayThemes: string[];
+  dayDescriptions: string[];
+} | null> {
+  if (!request.useAI) {
+    return { enhancedPois: pois, dayThemes: [], dayDescriptions: [] };
+  }
+
+  const poisSummary = pois.map((p) => `${p.name} (${p.category})`).join(", ");
+
+  const prompt = `
+You are Wayfare AI, a travel itinerary enhancer. Analyze these points of interest for ${request.city}:
+
+Points: ${poisSummary}
+
+Context:
+- ${request.days}-day trip
+- Style: ${request.travelStyle}
+- Preferences: ${Object.entries(request.preferences)
+  .filter(([_, v]) => v)
+  .map(([k, v]) => `${k}=${v}`)
+  .join(", ")}
+
+Provide a JSON response with the following structure:
+{
+  "poi_enrichment": [
+    {
+      "id": "poi_id",
+      "suggested_category": "museum|restaurant|cafe|park|attraction",
+      "suggested_duration_minutes": 30-120,
+      "suggested_order": 0-${pois.length-1},
+      "notes": "Brief reason for this categorization and duration"
+    }
+  ],
+  "day_themes": [
+    {
+      "day": 1,
+      "theme": "Historic Center Morning",
+      "description": "Explore the old town's UNESCO sites and grand squares"
+    }
+  ],
+  "day_descriptions": [
+    {
+      "day": 1,
+      "description": "A perfect introduction to the city's iconic attractions"
+    }
+  ]
+}
+
+Keep it concise. Only use real POIs from the input. Never invent new places.
+`;
+
+  const aiResponse = await callGLMForItinerary(env, {
+    city: request.city,
+    days: request.days,
+    budget: request.budget,
+    currency: request.currency,
+    travelStyle: request.travelStyle,
+    preferences: request.preferences,
+    mustSee: request.mustSee
+  });
+
+  if (!aiResponse) {
+    return { enhancedPois: pois, dayThemes: [], dayDescriptions: [] };
+  }
+
+  try {
+    const enriched = JSON.parse(aiResponse) as any;
+
+    // Parse POI enrichment
+    const enhancedPois = pois.map((poi, idx) => {
+      const enrichment = enriched.poi_enrichment?.[idx];
+      if (!enrichment) return poi;
+
+      return {
+        ...poi,
+        category: enrichment.suggested_category || poi.category,
+        durationMinutes: enrichment.suggested_duration_minutes || poi.durationMinutes,
+        notes: enrichment.notes
+      };
+    });
+
+    // Parse day themes
+    const dayThemes = enriched.day_themes?.map((d: any) => d.theme) || [];
+
+    // Parse day descriptions
+    const dayDescriptions = enriched.day_descriptions?.map((d: any) => d.description) || [];
+
+    return { enhancedPois, dayThemes, dayDescriptions };
+  } catch (error) {
+    console.error("Failed to parse AI enrichment response:", error);
+    // Fall back to original POIs
+    return { enhancedPois: pois, dayThemes: [], dayDescriptions: [] };
+  }
+}
+
 function buildExplanation(dayStops: Stop[], travelStyle: TravelStyle, budgetSaver: boolean) {
   const categories = Array.from(new Set(dayStops.map((s) => s.category))).join(", ");
   const saver = budgetSaver ? "Budget saver mode prioritizes lower-cost venues." : "Balanced spend across highlights and meals.";
@@ -266,7 +374,12 @@ export async function createItinerary(env: Env, input: PlanRequest): Promise<Iti
   const filtered = allPois.filter((p) => preferenceMatch(p, input.preferences));
   const withMustSee = forceMustSee(input, filtered.length ? filtered : allPois);
 
-  const selected = withMustSee.slice(0, Math.max(dayCount * STYLE_STOP_COUNT[input.travelStyle], dayCount * 3));
+  // AI enrichment if enabled
+  const aiEnrichment = input.useAI
+    ? await enrichPoisWithAI(env, withMustSee.slice(0, Math.max(dayCount * 5, dayCount * 8)), input)
+    : { enhancedPois: withMustSee, dayThemes: [], dayDescriptions: [] };
+
+  const selected = aiEnrichment.enhancedPois.slice(0, Math.max(dayCount * STYLE_STOP_COUNT[input.travelStyle], dayCount * 3));
   const clustered = clusterByDay(selected, dayCount, geocoded.center);
 
   const dailyBudget = input.budget / dayCount;
@@ -308,13 +421,17 @@ export async function createItinerary(env: Env, input: PlanRequest): Promise<Iti
     const withMeals = insertMeals(mapped);
     const routeGeometry = await osrmRoute(env, ordered.map((p) => [p.lon, p.lat]), input.transportMode);
 
+    // Use AI themes and descriptions if available, otherwise build default
+    const dayTheme = aiEnrichment.dayThemes[dayIdx] || "";
+    const dayDesc = aiEnrichment.dayDescriptions[dayIdx] || buildExplanation(withMeals, input.travelStyle, input.budgetSaver);
+
     dailyPlans.push({
       dayNumber: dayIdx + 1,
       date: input.dateFrom ? new Date(new Date(input.dateFrom).getTime() + dayIdx * 86400000).toISOString().slice(0, 10) : `Day ${dayIdx + 1}`,
       routeGeometry,
       stops: withMeals,
       dayCost: Math.min(dayCost, dailyBudget * 1.35),
-      explanation: buildExplanation(withMeals, input.travelStyle, input.budgetSaver)
+      explanation: dayDesc
     });
   }
 

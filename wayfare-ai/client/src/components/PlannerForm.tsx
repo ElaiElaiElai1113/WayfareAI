@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Sparkles } from "lucide-react";
 import type { PlanRequest } from "@/types/itinerary";
 
 const schema = z.object({
@@ -27,7 +28,8 @@ const schema = z.object({
   shopping: z.boolean(),
   hiddenGems: z.boolean(),
   rainPlan: z.boolean(),
-  budgetSaver: z.boolean()
+  budgetSaver: z.boolean(),
+  useAI: z.boolean()
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -50,7 +52,8 @@ const defaults: FormValues = {
   shopping: false,
   hiddenGems: true,
   rainPlan: true,
-  budgetSaver: false
+  budgetSaver: false,
+  useAI: true
 };
 
 export function PlannerForm({ onSubmit, loading }: { onSubmit: (payload: PlanRequest) => Promise<void>; loading: boolean }) {
@@ -129,7 +132,8 @@ export function PlannerForm({ onSubmit, loading }: { onSubmit: (payload: PlanReq
               hiddenGems: values.hiddenGems
             },
             rainPlan: values.rainPlan,
-            budgetSaver: values.budgetSaver
+            budgetSaver: values.budgetSaver,
+            useAI: values.useAI
           });
         })}
       >
@@ -137,8 +141,8 @@ export function PlannerForm({ onSubmit, loading }: { onSubmit: (payload: PlanReq
           <label className="text-sm font-medium text-slate-700">City</label>
           <Input list="city-options" placeholder="Search city" {...form.register("city")} />
           <datalist id="city-options">
-            {suggestions.map((option) => (
-              <option key={option.name} value={option.name} />
+            {suggestions.map((option, index) => (
+              <option key={`${option.name}-${index}`} value={option.name} />
             ))}
           </datalist>
           {form.formState.errors.city && <p className="text-xs text-red-600">{form.formState.errors.city.message}</p>}
@@ -198,6 +202,11 @@ export function PlannerForm({ onSubmit, loading }: { onSubmit: (payload: PlanReq
               <Switch checked={form.watch(item.key)} onCheckedChange={(value) => form.setValue(item.key, value)} />
             </label>
           ))}
+          <label className="flex items-center justify-between rounded-xl border border-white/70 bg-white/55 px-3 py-2 text-sm text-slate-700">
+            <Sparkles className="h-4 w-4 text-slate-500" />
+            AI Enhancement
+            <Switch checked={form.watch("useAI")} onCheckedChange={(value) => form.setValue("useAI", value)} />
+          </label>
           <label className="flex items-center justify-between rounded-xl border border-white/70 bg-white/55 px-3 py-2 text-sm text-slate-700">
             Rain Plan
             <Switch checked={form.watch("rainPlan")} onCheckedChange={(value) => form.setValue("rainPlan", value)} />

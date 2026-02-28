@@ -49,6 +49,7 @@ export type PlanRequest = {
   preferences: Record<string, boolean>;
   rainPlan: boolean;
   budgetSaver: boolean;
+  useAI?: boolean;
 };
 
 export type ShareResponse = {

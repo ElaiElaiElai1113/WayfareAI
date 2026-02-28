@@ -9,18 +9,30 @@ OVERPASS_BASE_URL = "https://overpass-api.de/api/interpreter"
 CACHE_TTL_SECONDS = "21600"
 RATE_LIMIT_WINDOW_SECONDS = "60"
 RATE_LIMIT_MAX_REQUESTS = "80"
+# Optional: Comma-separated list of allowed CORS origins (use "*" for all)
+ALLOWED_ORIGINS = "*"
+# Optional: Base URL for share links (auto-detected if not set)
+APP_BASE_URL = ""
+# Optional: GLM z.AI API configuration
+GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+GLM_MODEL = "glm-4.7"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "wayfare_ai"
-database_id = "replace-with-your-d1-database-id"
+database_id = "b1a0a648-3709-4dd5-abf4-d27d0d0295ec"
 migrations_dir = "worker/migrations"
 
 [[kv_namespaces]]
 binding = "CACHE"
-id = "replace-with-your-kv-namespace-id"
+id = "d97c72c51af74dbda433bb2feacb1058"
 
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "replace-with-your-rate-limit-kv-namespace-id"
+id = "24ca7a1ecd2a49998b4cae108d7cd3af"
+
+# Optional: KV namespace for request metrics (for monitoring)
+# [[kv_namespaces]]
+# binding = "REQUEST_METRICS"
+# id = "your-metrics-namespace-id"
 
