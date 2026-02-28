@@ -248,7 +248,7 @@ export async function callGLMForItinerary(
                   ]
                 }
 
-                Include real attractions, restaurants, and activities in ${request.city}. Focus on must-see places first.`
+                Prioritize attractions (museums, viewpoints, parks, beaches, cultural sites) over restaurants. Include meals naturally - only 1-2 per day, not every stop. Mix different stop types. Create diverse itineraries. in ${request.city}. Focus on must-see places first.`
               },
               {
                 role: "user",
