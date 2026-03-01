@@ -11,7 +11,21 @@ export type Stop = {
   durationMinutes: number;
   travelMinutesFromPrev: number;
   estimatedCost: number;
+  tags?: Record<string, string>;
+  address?: string;
+  website?: string;
+  opening_hours?: string;
+  cuisine?: string;
+  wikipedia?: string;
+  wikidata?: string;
   notes?: string;
+};
+
+export type StopDescription = {
+  about: string;
+  why_this_stop: string;
+  quick_tip: string;
+  confidence: "high" | "medium" | "low";
 };
 
 export type DayPlan = {
@@ -56,4 +70,3 @@ export type ShareResponse = {
   slug: string;
   url: string;
 };
-

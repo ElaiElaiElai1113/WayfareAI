@@ -1,67 +1,28 @@
 ﻿import type { Env, GeocodeResult, Itinerary, PlanRequest, Poi, Stop, TransportMode, TravelStyle } from "../src/types";
 import { cacheKey, fromTime, toTime, withCache } from "../src/utils";
 
-type ScoredPoi = Poi & {
-  score: number;
-  distanceFromClusterKm?: number;
-  cuisine?: string;
+type ScoredPoi = Poi & { score: number; cuisine?: string; distanceKm?: number; kind?: "indoor" | "outdoor" };
+type EnergyLevel = "Light" | "Moderate" | "High";
+
+const CHAIN_NAMES = ["jollibee","mcdonald's","mcdonalds","kfc","chowking","greenwich","mang inasal","gerry's grill","gerrys grill","shakey's","shakeys","pizza hut"];
+const LUNCH_WINDOW: [number, number] = [690, 840];
+const DINNER_WINDOW: [number, number] = [1080, 1200];
+const ENERGY_LIMIT: Record<TravelStyle, number> = { Relaxed: 4, Balanced: 6, Packed: 8 };
+const DEFAULT_POI_COST: Record<string, number> = { museum: 16, park: 0, cafe: 8, restaurant: 18, viewpoint: 0, attraction: 12, shopping: 15, nightlife: 20 };
+const TEMPLATE: Record<TravelStyle, { attractionsMin: number; attractionsMax: number; cafe: boolean }> = {
+  Relaxed: { attractionsMin: 2, attractionsMax: 2, cafe: true },
+  Balanced: { attractionsMin: 3, attractionsMax: 3, cafe: true },
+  Packed: { attractionsMin: 4, attractionsMax: 5, cafe: true }
 };
-
-type DayTemplate = {
-  attractionsMin: number;
-  attractionsMax: number;
-  includeCafeOptional: boolean;
-  includeScenicOptional: boolean;
-};
-
-const CHAIN_NAMES = [
-  "jollibee",
-  "mcdonald's",
-  "mcdonalds",
-  "kfc",
-  "chowking",
-  "greenwich",
-  "mang inasal",
-  "gerry's grill",
-  "gerrys grill",
-  "shakey's",
-  "shakeys",
-  "pizza hut"
-];
-
-const DEFAULT_POI_COST: Record<string, number> = {
-  museum: 16,
-  park: 0,
-  cafe: 8,
-  restaurant: 18,
-  viewpoint: 0,
-  attraction: 12,
-  hidden_gem: 7,
-  shopping: 15,
-  nightlife: 20
-};
-
-const DAY_TEMPLATES: Record<TravelStyle, DayTemplate> = {
-  Relaxed: { attractionsMin: 2, attractionsMax: 2, includeCafeOptional: true, includeScenicOptional: true },
-  Balanced: { attractionsMin: 3, attractionsMax: 3, includeCafeOptional: true, includeScenicOptional: false },
-  Packed: { attractionsMin: 4, attractionsMax: 5, includeCafeOptional: true, includeScenicOptional: false }
-};
-
-const LUNCH_WINDOW: [number, number] = [11 * 60 + 30, 14 * 60];
-const DINNER_WINDOW: [number, number] = [18 * 60, 20 * 60];
 
 function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
   const dLon = ((b.lon - a.lon) * Math.PI) / 180;
-  const sa =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) *
-      Math.cos((b.lat * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
+  const sa = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(sa), Math.sqrt(1 - sa));
 }
 
-function normalizeCategory(tags: Record<string, string>): string {
+function normalizeCategory(tags: Record<string, string>) {
   if (tags.amenity === "restaurant") return "restaurant";
   if (tags.amenity === "cafe") return "cafe";
   if (tags.leisure === "park" || tags.leisure === "garden") return "park";
@@ -74,87 +35,18 @@ function normalizeCategory(tags: Record<string, string>): string {
 
 function normalizePois(elements: Array<any>, forceCategory?: string): Poi[] {
   const seen = new Set<string>();
-  const pois: Poi[] = [];
-
+  const out: Poi[] = [];
   for (const item of elements) {
     const lat = item.lat ?? item.center?.lat;
     const lon = item.lon ?? item.center?.lon;
     const name = item.tags?.name;
     if (!lat || !lon || !name) continue;
-
     const key = `${String(name).toLowerCase()}_${Number(lat).toFixed(4)}_${Number(lon).toFixed(4)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-
-    const sourceTags = (item.tags ?? {}) as Record<string, string>;
-    pois.push({
-      id: `poi_${item.type}_${item.id}`,
-      name,
-      category: forceCategory ?? normalizeCategory(sourceTags),
-      lat: Number(lat),
-      lon: Number(lon),
-      sourceTags
-    });
+    out.push({ id: `poi_${item.type}_${item.id}`, name, category: forceCategory ?? normalizeCategory((item.tags ?? {}) as Record<string, string>), lat: Number(lat), lon: Number(lon), sourceTags: (item.tags ?? {}) as Record<string, string> });
   }
-
-  return pois;
-}
-
-async function geocodeCity(env: Env, city: string): Promise<GeocodeResult> {
-  const ttl = Number(env.CACHE_TTL_SECONDS || "21600");
-  return withCache(env, cacheKey("geo", city.toLowerCase()), ttl, async () => {
-    const url = `${env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=1&q=${encodeURIComponent(city)}`;
-    const response = await fetch(url, { headers: { "User-Agent": "WayfareAI/1.0" } });
-    if (!response.ok) throw new Error(`Nominatim error: ${response.status}`);
-    const data = (await response.json()) as Array<{
-      display_name: string;
-      boundingbox: [string, string, string, string];
-      lon: string;
-      lat: string;
-    }>;
-    if (!data.length) throw new Error("City not found");
-
-    const top = data[0];
-    return {
-      name: top.display_name,
-      bbox: [
-        Number(top.boundingbox[2]),
-        Number(top.boundingbox[0]),
-        Number(top.boundingbox[3]),
-        Number(top.boundingbox[1])
-      ],
-      center: [Number(top.lon), Number(top.lat)]
-    };
-  });
-}
-
-function buildAttractionQuery(bbox: [number, number, number, number]) {
-  const [minLon, minLat, maxLon, maxLat] = bbox;
-  const bb = `${minLat},${minLon},${maxLat},${maxLon}`;
-  return `
-[out:json][timeout:25];
-(
-  node["tourism"~"attraction|museum|gallery|viewpoint|artwork|zoo|theme_park"](${bb});
-  node["historic"](${bb});
-  node["leisure"~"park|garden|nature_reserve"](${bb});
-  way["tourism"~"attraction|museum|gallery|viewpoint|artwork|zoo|theme_park"](${bb});
-  way["historic"](${bb});
-  way["leisure"~"park|garden|nature_reserve"](${bb});
-);
-out center tags 400;
-`;
-}
-
-function buildFoodQuery(center: [number, number], radiusMeters: number, amenity: "restaurant" | "cafe") {
-  const [lon, lat] = center;
-  return `
-[out:json][timeout:20];
-(
-  node(around:${radiusMeters},${lat},${lon})["amenity"="${amenity}"];
-  way(around:${radiusMeters},${lat},${lon})["amenity"="${amenity}"];
-);
-out center tags 200;
-`;
+  return out;
 }
 
 async function fetchOverpassPois(env: Env, key: string, query: string, forceCategory?: string): Promise<Poi[]> {
@@ -167,228 +59,154 @@ async function fetchOverpassPois(env: Env, key: string, query: string, forceCate
   });
 }
 
-async function fetchCityAttractions(env: Env, bbox: [number, number, number, number]) {
-  return fetchOverpassPois(env, cacheKey("attractions", ...bbox.map((v) => v.toFixed(3))), buildAttractionQuery(bbox));
-}
-
-async function fetchRestaurantsNear(env: Env, center: [number, number], radiusMeters: number) {
-  return fetchOverpassPois(
-    env,
-    cacheKey("restaurants", center[0].toFixed(4), center[1].toFixed(4), radiusMeters),
-    buildFoodQuery(center, radiusMeters, "restaurant"),
-    "restaurant"
-  );
-}
-
-async function fetchCafesNear(env: Env, center: [number, number], radiusMeters: number) {
-  return fetchOverpassPois(
-    env,
-    cacheKey("cafes", center[0].toFixed(4), center[1].toFixed(4), radiusMeters),
-    buildFoodQuery(center, radiusMeters, "cafe"),
-    "cafe"
-  );
-}
-
-async function osrmTable(env: Env, coords: Array<[number, number]>, mode: TransportMode): Promise<number[][]> {
-  if (coords.length < 2) return [coords.map(() => 0)];
-  const coordString = coords.map((c) => `${c[0]},${c[1]}`).join(";");
+async function geocodeCity(env: Env, city: string): Promise<GeocodeResult> {
   const ttl = Number(env.CACHE_TTL_SECONDS || "21600");
-  return withCache(env, cacheKey("osrm-table", mode, coordString.slice(0, 320)), ttl, async () => {
-    const response = await fetch(`${env.OSRM_BASE_URL}/table/v1/${mode}/${coordString}?annotations=duration`);
-    if (!response.ok) throw new Error(`OSRM table failed: ${response.status}`);
-    const data = (await response.json()) as { durations: number[][] | null };
-    return (data.durations ?? []).map((row) => row.map((sec) => (Number.isFinite(sec) ? Math.round(sec / 60) : 999)));
+  return withCache(env, cacheKey("geo", city.toLowerCase()), ttl, async () => {
+    const response = await fetch(`${env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=1&q=${encodeURIComponent(city)}`, { headers: { "User-Agent": "WayfareAI/1.0" } });
+    if (!response.ok) throw new Error(`Nominatim error: ${response.status}`);
+    const data = (await response.json()) as Array<{ display_name: string; boundingbox: [string, string, string, string]; lon: string; lat: string }>;
+    if (!data.length) throw new Error("City not found");
+    const top = data[0];
+    return { name: top.display_name, bbox: [Number(top.boundingbox[2]), Number(top.boundingbox[0]), Number(top.boundingbox[3]), Number(top.boundingbox[1])], center: [Number(top.lon), Number(top.lat)] };
   });
 }
 
-async function osrmRoute(env: Env, coords: Array<[number, number]>, mode: TransportMode): Promise<[number, number][]> {
-  if (coords.length < 2) return [];
-  const coordString = coords.map((c) => `${c[0]},${c[1]}`).join(";");
-  const ttl = Number(env.CACHE_TTL_SECONDS || "21600");
-  return withCache(env, cacheKey("osrm-route", mode, coordString.slice(0, 320)), ttl, async () => {
-    const response = await fetch(`${env.OSRM_BASE_URL}/route/v1/${mode}/${coordString}?overview=full&geometries=geojson`);
-    if (!response.ok) throw new Error(`OSRM route failed: ${response.status}`);
-    const data = (await response.json()) as { routes?: Array<{ geometry: { coordinates: [number, number][] } }> };
-    return data.routes?.[0]?.geometry?.coordinates ?? [];
-  });
+function attractionQuery(bbox: [number, number, number, number]) {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const bb = `${minLat},${minLon},${maxLat},${maxLon}`;
+  return `\n[out:json][timeout:25];\n(\n  node["tourism"~"attraction|museum|gallery|viewpoint|artwork|zoo|theme_park"](${bb});\n  node["historic"](${bb});\n  node["leisure"~"park|garden|nature_reserve"](${bb});\n  way["tourism"~"attraction|museum|gallery|viewpoint|artwork|zoo|theme_park"](${bb});\n  way["historic"](${bb});\n  way["leisure"~"park|garden|nature_reserve"](${bb});\n);\nout center tags 400;\n`;
 }
 
-function hasWiki(tags: Record<string, string>) {
-  return Boolean(tags.wikipedia || tags.wikidata);
+function foodQuery(center: [number, number], radius: number, amenity: "restaurant" | "cafe") {
+  const [lon, lat] = center;
+  return `\n[out:json][timeout:20];\n(\n  node(around:${radius},${lat},${lon})["amenity"="${amenity}"];\n  way(around:${radius},${lat},${lon})["amenity"="${amenity}"];\n);\nout center tags 200;\n`;
 }
 
 function isChain(name: string, tags: Record<string, string>) {
-  const loweredName = name.toLowerCase();
-  const brandText = `${tags.brand || ""} ${tags.operator || ""}`.toLowerCase();
-  if (tags.brand || tags.operator) return true;
-  return CHAIN_NAMES.some((chain) => loweredName.includes(chain) || brandText.includes(chain));
+  const mix = `${name} ${tags.brand || ""} ${tags.operator || ""}`.toLowerCase();
+  return Boolean(tags.brand || tags.operator || CHAIN_NAMES.some((c) => mix.includes(c)));
 }
 
-function cuisineTokens(tags: Record<string, string>) {
-  return (tags.cuisine || "")
-    .toLowerCase()
-    .split(/[;,]/)
-    .map((v) => v.trim())
-    .filter(Boolean);
+function cuisineOf(tags: Record<string, string>) { return (tags.cuisine || "").toLowerCase().split(/[;,]/).map((x) => x.trim()).filter(Boolean)[0] || "generic"; }
+function isLocalCuisine(tags: Record<string, string>) { return (tags.cuisine || "").toLowerCase().includes("filipino") || (tags.cuisine || "").toLowerCase().includes("local"); }
+function kindFor(category: string): "indoor" | "outdoor" { return ["museum", "shopping", "cafe", "restaurant"].includes(category) ? "indoor" : "outdoor"; }
+
+function attractionScore(p: Poi) {
+  const t = p.sourceTags;
+  let s = 0;
+  if (t.wikipedia || t.wikidata) s += 3;
+  if (t.website) s += 2;
+  if (t.opening_hours) s += 1;
+  if (t.tourism) s += 1;
+  if (Object.keys(t).length < 3) s -= 2;
+  return s;
 }
 
-function isLocalCuisine(tags: Record<string, string>) {
-  const cuisines = cuisineTokens(tags);
-  return cuisines.some((c) => c.includes("filipino") || c.includes("local") || c.includes("regional"));
+function restaurantScore(p: Poi, center: [number, number]) {
+  const d = haversineKm({ lat: p.lat, lon: p.lon }, { lat: center[1], lon: center[0] });
+  let s = 0;
+  if (isLocalCuisine(p.sourceTags)) s += 3;
+  if (!p.sourceTags.brand && !p.sourceTags.operator) s += 2;
+  if (p.sourceTags.website) s += 1;
+  if (Object.keys(p.sourceTags).length >= 5) s += 1;
+  if (isChain(p.name, p.sourceTags)) s -= 3;
+  if (d > 1.5) s -= 2;
+  if (d >= 0.8 && d <= 1.5) s += 1;
+  return { score: s, distanceKm: d };
 }
 
-function attractionScore(poi: Poi) {
-  const tags = poi.sourceTags;
-  let score = 0;
-  if (hasWiki(tags)) score += 3;
-  if (tags.website) score += 2;
-  if (tags.opening_hours) score += 1;
-  if (tags.tourism) score += 1;
-  if (Object.keys(tags).length < 3) score -= 2;
-  return score;
+function cafeScore(p: Poi, center: [number, number]) {
+  const d = haversineKm({ lat: p.lat, lon: p.lon }, { lat: center[1], lon: center[0] });
+  let s = 0;
+  if (!p.sourceTags.brand && !p.sourceTags.operator) s += 2;
+  if (p.sourceTags.website) s += 1;
+  if (Object.keys(p.sourceTags).length >= 5) s += 1;
+  if (d > 1.5) s -= 2;
+  return { score: s, distanceKm: d };
 }
 
-function restaurantScore(poi: Poi, clusterCenter: [number, number]) {
-  const tags = poi.sourceTags;
-  const distanceKm = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: clusterCenter[1], lon: clusterCenter[0] });
-  let score = 0;
+function clampWindow(mins: number, w: [number, number]) { if (mins < w[0]) return w[0]; if (mins > w[1]) return w[1]; return mins; }
+function energyLevel(score: number): EnergyLevel { if (score <= 3) return "Light"; if (score <= 6) return "Moderate"; return "High"; }
 
-  if (isLocalCuisine(tags)) score += 3;
-  if (!tags.brand && !tags.operator) score += 2;
-  if (tags.website) score += 1;
-  if (Object.keys(tags).length >= 5) score += 1;
-  if (isChain(poi.name, tags)) score -= 3;
-  if (distanceKm > 1.5) score -= 2;
-
-  if (distanceKm >= 0.8 && distanceKm <= 1.5) score += 1;
-
-  return { score, distanceKm };
-}
-
-function cafeScore(poi: Poi, clusterCenter: [number, number]) {
-  const distanceKm = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: clusterCenter[1], lon: clusterCenter[0] });
-  let score = 0;
-  if (!poi.sourceTags.brand && !poi.sourceTags.operator) score += 2;
-  if (poi.sourceTags.website) score += 1;
-  if (Object.keys(poi.sourceTags).length >= 5) score += 1;
-  if (distanceKm > 1.5) score -= 2;
-  if (distanceKm >= 0.8 && distanceKm <= 1.5) score += 1;
-  return { score, distanceKm };
-}
-
-function preferenceMatch(poi: Poi, preferences: Record<string, boolean>) {
-  if (poi.category === "park" || poi.category === "viewpoint") return Boolean(preferences.nature);
-  if (poi.category === "museum") return Boolean(preferences.museums);
-  if (poi.category === "cafe") return Boolean(preferences.cafes);
-  if (poi.category === "restaurant") return Boolean(preferences.localFood);
-  if (poi.category === "nightlife") return Boolean(preferences.nightlife);
-  if (poi.category === "shopping") return Boolean(preferences.shopping);
-  return Boolean(preferences.hiddenGems);
-}
-
-function forceMustSee(input: PlanRequest, attractions: ScoredPoi[], fallbackCenter: [number, number]): ScoredPoi[] {
-  if (!input.mustSee.length) return attractions;
-  const must = input.mustSee.map((m) => m.toLowerCase());
-  const existing = [...attractions];
-
-  for (const item of must) {
-    const already = existing.some((poi) => poi.name.toLowerCase().includes(item));
-    if (already) continue;
-    existing.unshift({
-      id: `must_${item.replace(/[^a-z0-9]/g, "")}`,
-      name: item,
-      category: "attraction",
-      lat: fallbackCenter[1],
-      lon: fallbackCenter[0],
-      sourceTags: { synthetic: "true" },
-      score: 6
-    });
-  }
-
-  return existing;
-}
-
-function centroid(points: Poi[]): [number, number] {
-  if (!points.length) return [0, 0];
-  const sums = points.reduce(
-    (acc, p) => {
-      acc.lon += p.lon;
-      acc.lat += p.lat;
-      return acc;
-    },
-    { lon: 0, lat: 0 }
-  );
-  return [sums.lon / points.length, sums.lat / points.length];
-}
-
-function clusterAttractionsByDay(attractions: ScoredPoi[], dayCount: number): ScoredPoi[][] {
-  if (dayCount <= 1) return [attractions];
-  if (attractions.length <= dayCount) {
-    return Array.from({ length: dayCount }, (_, i) => (attractions[i] ? [attractions[i]] : []));
-  }
-
-  const sorted = [...attractions].sort((a, b) => b.score - a.score);
-  const centroids: [number, number][] = sorted.slice(0, dayCount).map((p) => [p.lon, p.lat]);
-  const buckets: ScoredPoi[][] = Array.from({ length: dayCount }, () => []);
-
-  for (const poi of sorted) {
-    let best = 0;
-    let bestDist = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < centroids.length; i += 1) {
-      const dist = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: centroids[i][1], lon: centroids[i][0] });
-      const loadPenalty = buckets[i].length * 0.08;
-      const adjusted = dist + loadPenalty;
-      if (adjusted < bestDist) {
-        best = i;
-        bestDist = adjusted;
-      }
+export function calculateEnergy(stops: Stop[]) {
+  let score = 0, walking = 0, travel = 0;
+  for (let i = 0; i < stops.length; i += 1) {
+    const c = stops[i].category;
+    if (c === "museum" || c === "attraction") score += 2;
+    if (c === "park" || c === "viewpoint") score += 1;
+    if (i > 0) {
+      walking += haversineKm({ lat: stops[i - 1].lat, lon: stops[i - 1].lon }, { lat: stops[i].lat, lon: stops[i].lon });
+      travel += stops[i].travelMinutesFromPrev;
     }
-    buckets[best].push(poi);
-    const c = centroid(buckets[best]);
-    centroids[best] = c;
   }
-
-  return buckets.map((bucket) => bucket.sort((a, b) => b.score - a.score));
+  if (walking > 5) score += 2;
+  if (travel > 90) score += 1;
+  return { energyScore: score, energyLevel: energyLevel(score), walkingKm: Number(walking.toFixed(2)), travelTimeMinutes: travel };
 }
 
-function nearestNeighborAttractions(items: ScoredPoi[]): ScoredPoi[] {
-  if (items.length <= 2) return items;
-  const remaining = [...items];
-  remaining.sort((a, b) => b.score - a.score);
-  const ordered: ScoredPoi[] = [remaining.shift()!];
+function timeBucket(mins: number): "morning" | "midday" | "afternoon" | "evening" {
+  if (mins < 690) return "morning";
+  if (mins < 870) return "midday";
+  if (mins < 1050) return "afternoon";
+  return "evening";
+}
 
-  while (remaining.length) {
-    const last = ordered[ordered.length - 1];
-    let bestIndex = 0;
-    let bestDist = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < remaining.length; i += 1) {
-      const dist = haversineKm({ lat: last.lat, lon: last.lon }, { lat: remaining[i].lat, lon: remaining[i].lon });
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIndex = i;
-      }
-    }
-    ordered.push(remaining.splice(bestIndex, 1)[0]);
+export function applyTimeOfDayWeights(attractions: ScoredPoi[], startMinutes: number, weekend: boolean, nightlifePref: boolean): ScoredPoi[] {
+  return attractions.map((p, i) => {
+    let s = p.score;
+    const b = timeBucket(startMinutes + i * 100);
+    if (b === "morning" && p.kind === "outdoor") s += 2;
+    if (b === "midday" && p.kind === "indoor") s += 2;
+    if (b === "afternoon" && (p.category === "park" || p.category === "viewpoint")) s += 2;
+    if (b === "evening" && nightlifePref && p.category === "nightlife") s += 2;
+    if (weekend && b === "midday" && p.category === "museum") s -= 2;
+    return { ...p, score: s };
+  }).sort((a, b) => b.score - a.score);
+}
+
+export function enforceDiversity(candidates: ScoredPoi[], memory: string[]): ScoredPoi[] {
+  const out: ScoredPoi[] = [];
+  const m = [...memory];
+  for (const c of candidates) {
+    const last = m.slice(-2);
+    if (last.length === 2 && last[0] === c.category && last[1] === c.category) continue;
+    out.push(c);
+    m.push(c.category);
+    if (m.length > 5) m.shift();
   }
-
-  return ordered;
+  return out;
+}
+export function weekendAdjustments(attractions: ScoredPoi[], dateIso: string): ScoredPoi[] {
+  const day = new Date(dateIso).getDay();
+  if (day !== 0 && day !== 6) return attractions;
+  return attractions.map((a) => ({ ...a, score: a.score + ((a.category === "park" || a.category === "viewpoint") ? 1 : 0) - (a.category === "museum" ? 1 : 0) })).sort((a, b) => b.score - a.score);
 }
 
-function pickAttractionsForTemplate(cluster: ScoredPoi[], style: TravelStyle): ScoredPoi[] {
-  const template = DAY_TEMPLATES[style];
-  const topAttractions = cluster.slice(0, 20);
-  const ordered = nearestNeighborAttractions(topAttractions);
-  const target =
-    style === "Packed"
-      ? Math.min(template.attractionsMax, Math.max(template.attractionsMin, ordered.length >= 5 ? 5 : 4))
-      : template.attractionsMin;
-  return ordered.slice(0, Math.max(1, target));
+function dayOfYear(date: Date) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  return Math.floor((date.getTime() - start.getTime()) / 86400000);
 }
 
-function clampToWindow(mins: number, window: [number, number]) {
-  if (mins < window[0]) return window[0];
-  if (mins > window[1]) return window[1];
-  return mins;
+function approxSunset(lat: number, dateIso: string) {
+  const d = new Date(dateIso);
+  const n = dayOfYear(d);
+  const decl = (-23.44 * Math.cos(((2 * Math.PI) / 365) * (n + 10)) * Math.PI) / 180;
+  const phi = (lat * Math.PI) / 180;
+  const h = Math.acos(Math.max(-0.99, Math.min(0.99, -Math.tan(phi) * Math.tan(decl))));
+  const dayLen = (2 * h * 24) / (2 * Math.PI);
+  return Math.max(1035, Math.min(1185, Math.round((12 + dayLen / 2) * 60)));
+}
+
+export function placeSunsetStop(stops: Stop[], dateIso: string): { stops: Stop[]; sunsetPlacement: boolean } {
+  const scenic = stops.findIndex((s) => s.category === "viewpoint" || s.category === "park");
+  if (scenic < 0) return { stops, sunsetPlacement: false };
+  const sunset = approxSunset(stops[scenic].lat, dateIso);
+  const target = stops.findIndex((s) => fromTime(s.startTime) >= sunset - 30);
+  if (target < 0 || target === scenic) return { stops, sunsetPlacement: true };
+  const next = [...stops];
+  const item = next.splice(scenic, 1)[0];
+  next.splice(Math.max(0, Math.min(next.length - 1, target)), 0, item);
+  return { stops: next, sunsetPlacement: true };
 }
 
 function stopDuration(style: TravelStyle, category: string) {
@@ -404,348 +222,378 @@ function estimateStopCost(category: string, budgetSaver: boolean) {
   return budgetSaver ? Math.max(0, base * 0.8) : base;
 }
 
-function selectRestaurant(
-  candidates: ScoredPoi[],
-  nearPoint: [number, number],
-  usedNames: Set<string>,
-  disallowCuisine?: string
-): ScoredPoi | undefined {
-  const ranked = [...candidates]
-    .filter((poi) => !usedNames.has(poi.name.toLowerCase()))
-    .filter((poi) => !disallowCuisine || (poi.cuisine ?? "") !== disallowCuisine)
-    .sort((a, b) => {
-      const da = haversineKm({ lat: a.lat, lon: a.lon }, { lat: nearPoint[1], lon: nearPoint[0] });
-      const db = haversineKm({ lat: b.lat, lon: b.lon }, { lat: nearPoint[1], lon: nearPoint[0] });
-      return b.score - a.score + (da - db) * 0.3;
-    });
-
-  return ranked[0];
+function buildAddress(tags: Record<string, string>) {
+  const line1 = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ").trim();
+  const line2 = [tags["addr:suburb"], tags["addr:city"] || tags["addr:town"] || tags["addr:village"], tags["addr:state"], tags["addr:country"]]
+    .filter(Boolean)
+    .join(", ")
+    .trim();
+  const address = [line1, line2].filter(Boolean).join(", ");
+  return address || undefined;
 }
 
-function buildDayExplanation(clusterCenter: [number, number]) {
-  return `Day grouped around ${clusterCenter[1].toFixed(3)}, ${clusterCenter[0].toFixed(3)} to minimize travel time. Lunch is placed near morning anchors, and dinner is near the final cluster for convenience.`;
+function centroid(points: Array<{ lat: number; lon: number }>): [number, number] {
+  const s = points.reduce((a, p) => ({ lat: a.lat + p.lat, lon: a.lon + p.lon }), { lat: 0, lon: 0 });
+  return [s.lon / points.length, s.lat / points.length];
 }
 
-function buildDaySequence(
-  attractions: ScoredPoi[],
-  lunch: ScoredPoi,
-  dinner: ScoredPoi,
-  optionalCafe: ScoredPoi | undefined,
-  style: TravelStyle
-): Poi[] {
-  const morningAnchor = attractions[0];
-  const secondary = attractions[1];
-  const afternoon = attractions.slice(2);
-
-  const sequence: Poi[] = [];
-  if (morningAnchor) sequence.push(morningAnchor);
-  if (secondary) sequence.push(secondary);
-  sequence.push({ ...lunch, category: "restaurant" });
-
-  for (const a of afternoon) sequence.push(a);
-
-  if (style === "Relaxed" && optionalCafe) {
-    sequence.push({ ...optionalCafe, category: "cafe" });
-  } else if (style !== "Relaxed" && optionalCafe && attractions.length >= 3) {
-    sequence.splice(Math.min(sequence.length, 4), 0, { ...optionalCafe, category: "cafe" });
+function clusterAttractionsByDay(attractions: ScoredPoi[], dayCount: number): ScoredPoi[][] {
+  const sorted = [...attractions].sort((a, b) => b.score - a.score);
+  const seeds = sorted.slice(0, Math.min(dayCount, sorted.length)).map((p) => [p.lon, p.lat] as [number, number]);
+  const out: ScoredPoi[][] = Array.from({ length: dayCount }, () => []);
+  for (const poi of sorted) {
+    let best = 0, bestD = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < seeds.length; i += 1) {
+      const d = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: seeds[i][1], lon: seeds[i][0] }) + out[i].length * 0.08;
+      if (d < bestD) { best = i; bestD = d; }
+    }
+    out[best].push(poi);
+    seeds[best] = centroid(out[best]);
   }
-
-  sequence.push({ ...dinner, category: "restaurant" });
-
-  const cleaned: Poi[] = [];
-  for (const stop of sequence) {
-    const prev = cleaned[cleaned.length - 1];
-    if (prev && prev.category === "restaurant" && stop.category === "restaurant") continue;
-    cleaned.push(stop);
-  }
-
-  return cleaned;
+  return out.map((c) => c.sort((a, b) => b.score - a.score));
 }
 
+function selectRestaurant(cands: ScoredPoi[], near: [number, number], usedNames: Set<string>, disallowCuisine?: string, cuisineMemory?: string[]) {
+  return [...cands].filter((c) => !usedNames.has(c.name.toLowerCase())).filter((c) => !disallowCuisine || c.cuisine !== disallowCuisine).sort((a, b) => {
+    const da = haversineKm({ lat: a.lat, lon: a.lon }, { lat: near[1], lon: near[0] });
+    const db = haversineKm({ lat: b.lat, lon: b.lon }, { lat: near[1], lon: near[0] });
+    let delta = (b.score - a.score) + (da - db) * 0.25;
+    if (cuisineMemory?.includes(a.cuisine || "")) delta -= 1;
+    if (cuisineMemory?.includes(b.cuisine || "")) delta += 1;
+    return delta;
+  })[0];
+}
+
+function updateTimes(stops: Stop[], startMinutes: number): Stop[] {
+  let cursor = startMinutes;
+  let food = 0;
+  return stops.map((s, i) => {
+    const t = i === 0 ? 0 : Math.max(5, Math.round(haversineKm({ lat: stops[i - 1].lat, lon: stops[i - 1].lon }, { lat: s.lat, lon: s.lon }) * 12));
+    cursor += t;
+    if (s.category === "restaurant") { food += 1; cursor = clampWindow(cursor, food === 1 ? LUNCH_WINDOW : DINNER_WINDOW); }
+    const startTime = toTime(cursor);
+    cursor += s.durationMinutes;
+    return { ...s, startTime, travelMinutesFromPrev: t };
+  });
+}
+
+async function osrmTable(env: Env, coords: Array<[number, number]>, mode: TransportMode): Promise<number[][]> {
+  if (coords.length < 2) return [coords.map(() => 0)];
+  const q = coords.map((c) => `${c[0]},${c[1]}`).join(";");
+  return withCache(env, cacheKey("osrm-table", mode, q.slice(0, 320)), Number(env.CACHE_TTL_SECONDS || "21600"), async () => {
+    const r = await fetch(`${env.OSRM_BASE_URL}/table/v1/${mode}/${q}?annotations=duration`);
+    if (!r.ok) throw new Error(`OSRM table failed: ${r.status}`);
+    const d = (await r.json()) as { durations: number[][] | null };
+    return (d.durations ?? []).map((row) => row.map((sec) => (Number.isFinite(sec) ? Math.round(sec / 60) : 999)));
+  });
+}
+
+async function osrmRoute(env: Env, coords: Array<[number, number]>, mode: TransportMode): Promise<[number, number][]> {
+  if (coords.length < 2) return [];
+  const q = coords.map((c) => `${c[0]},${c[1]}`).join(";");
+  return withCache(env, cacheKey("osrm-route", mode, q.slice(0, 320)), Number(env.CACHE_TTL_SECONDS || "21600"), async () => {
+    const r = await fetch(`${env.OSRM_BASE_URL}/route/v1/${mode}/${q}?overview=full&geometries=geojson`);
+    if (!r.ok) throw new Error(`OSRM route failed: ${r.status}`);
+    const d = (await r.json()) as { routes?: Array<{ geometry: { coordinates: [number, number][] } }> };
+    return d.routes?.[0]?.geometry?.coordinates ?? [];
+  });
+}
+
+function dayExplanation(cluster: [number, number], style: TravelStyle, energy: EnergyLevel, sunset: boolean, budgetAligned: boolean, weekend: boolean) {
+  const a = weekend ? "Weekend crowd sensitivity was applied with earlier major attractions." : "Transit was minimized via cluster-first planning.";
+  const b = sunset ? " A scenic stop is placed near sunset." : "";
+  const c = budgetAligned ? " Budget stays aligned." : " Budget is slightly stretched for quality choices.";
+  return `Day focuses on ${cluster[1].toFixed(3)}, ${cluster[0].toFixed(3)}. ${a} Energy is ${energy}, aligned with ${style} pace.${b}${c}`;
+}
+
+function diversityScore(days: Itinerary["days"]) {
+  const cats = days.flatMap((d) => d.stops.map((s) => s.category));
+  const uniq = new Set(cats);
+  if (!cats.length) return 0;
+  return Number((Math.min(1, uniq.size / Math.max(1, cats.length / 2)) * 100).toFixed(1));
+}
+
+function deriveDate(input: PlanRequest, idx: number) {
+  return input.dateFrom ? new Date(new Date(input.dateFrom).getTime() + idx * 86400000).toISOString().slice(0, 10) : new Date(Date.now() + idx * 86400000).toISOString().slice(0, 10);
+}
+
+export function balanceLongTrip(days: Itinerary["days"], style: TravelStyle): Itinerary["days"] {
+  if (days.length < 4) return days;
+  const next = [...days];
+  if (!next.some((d) => d.energyLevel === "Light")) {
+    const i = next.findIndex((d) => (d.energyScore || 0) === Math.max(...next.map((x) => x.energyScore || 0)));
+    if (i >= 0) {
+      const j = next[i].stops.findLastIndex((s) => s.category !== "restaurant");
+      if (j > 1) {
+        next[i].stops.splice(j, 1);
+        const e = calculateEnergy(next[i].stops);
+        next[i].energyScore = e.energyScore;
+        next[i].energyLevel = e.energyLevel;
+      }
+    }
+  }
+  if (!next.some((d) => d.title?.includes("Signature")) && next.length) next[0].title = `${next[0].title} - Signature`;
+  return next;
+}
 export async function createItinerary(env: Env, input: PlanRequest): Promise<Itinerary> {
   const geocoded = await geocodeCity(env, input.city);
-  const dayCount =
-    input.days ??
-    (input.dateFrom && input.dateTo
-      ? Math.max(1, Math.ceil((new Date(input.dateTo).getTime() - new Date(input.dateFrom).getTime()) / 86400000) + 1)
-      : 3);
+  const dayCount = input.days ?? (input.dateFrom && input.dateTo ? Math.max(1, Math.ceil((new Date(input.dateTo).getTime() - new Date(input.dateFrom).getTime()) / 86400000) + 1) : 3);
 
-  // 1) Fetch attractions city-wide
-  const rawAttractions = await fetchCityAttractions(env, geocoded.bbox);
-
-  // 2) Score and filter attractions
-  const scoredAttractions: ScoredPoi[] = rawAttractions
-    .filter((poi) => poi.category !== "restaurant" && poi.category !== "cafe")
-    .filter((poi) => preferenceMatch(poi, input.preferences))
-    .map((poi) => ({ ...poi, score: attractionScore(poi) }))
+  const attractionsRaw = await fetchOverpassPois(env, cacheKey("attractions", ...geocoded.bbox.map((x) => x.toFixed(3))), attractionQuery(geocoded.bbox));
+  const base: ScoredPoi[] = attractionsRaw
+    .filter((p) => p.category !== "restaurant" && p.category !== "cafe")
+    .filter((p) => preferenceMatch(p, input.preferences))
+    .map((p) => ({ ...p, score: attractionScore(p), kind: kindFor(p.category) }))
     .sort((a, b) => b.score - a.score);
 
-  const seededAttractions = forceMustSee(input, scoredAttractions, geocoded.center);
+  const seeded = [...base];
+  for (const must of input.mustSee.map((m) => m.toLowerCase())) {
+    if (!seeded.some((p) => p.name.toLowerCase().includes(must))) {
+      seeded.unshift({ id: `must_${must.replace(/[^a-z0-9]/g, "")}`, name: must, category: "attraction", lat: geocoded.center[1], lon: geocoded.center[0], sourceTags: { synthetic: "true" }, score: 6, kind: "outdoor" });
+    }
+  }
 
-  // 3) Cluster attractions geographically by day
-  const clusters = clusterAttractionsByDay(seededAttractions, dayCount);
-
+  const clusters = clusterAttractionsByDay(seeded, dayCount);
   const usedRestaurantNames = new Set<string>();
+  const cuisineMemory: string[] = [];
+  const diversityMemory: string[] = [];
+  const clusterMemory = new Set<string>();
   const days: Itinerary["days"] = [];
 
   for (let dayIdx = 0; dayIdx < dayCount; dayIdx += 1) {
     const cluster = clusters[dayIdx] ?? [];
     if (!cluster.length) continue;
 
-    // 4) Lock attraction selections per template
-    const selectedAttractions = pickAttractionsForTemplate(cluster, input.travelStyle);
-    const clusterCenter = centroid(selectedAttractions);
+    const date = deriveDate(input, dayIdx);
+    const weekend = [0, 6].includes(new Date(date).getDay());
+    const t = TEMPLATE[input.travelStyle];
 
-    // 5) Fetch restaurants for this day cluster only (never city-wide)
-    const nearbyRestaurantsRaw = await fetchRestaurantsNear(env, clusterCenter, 1500);
-    const restaurantCandidates: ScoredPoi[] = nearbyRestaurantsRaw
-      .map((poi) => {
-        const foodScore = restaurantScore(poi, clusterCenter);
-        return {
-          ...poi,
-          score: foodScore.score,
-          distanceFromClusterKm: foodScore.distanceKm,
-          cuisine: cuisineTokens(poi.sourceTags)[0] || "generic"
-        };
+    let attractions = weekendAdjustments(cluster.slice(0, 20), date);
+    attractions = applyTimeOfDayWeights(attractions, fromTime(input.dailyStartTime), weekend, Boolean(input.preferences.nightlife));
+    attractions = enforceDiversity(attractions, diversityMemory).slice(0, t.attractionsMax);
+    if (attractions.length < t.attractionsMin) continue;
+
+    const center = centroid(attractions);
+    const clusterKey = `${center[0].toFixed(2)}_${center[1].toFixed(2)}`;
+    if (dayCount >= 4 && clusterMemory.has(clusterKey)) continue;
+    clusterMemory.add(clusterKey);
+
+    const restaurants = (await fetchOverpassPois(env, cacheKey("restaurants", center[0].toFixed(4), center[1].toFixed(4), 1500), foodQuery(center, 1500, "restaurant"), "restaurant"))
+      .map((p) => {
+        const rs = restaurantScore(p, center);
+        return { ...p, score: rs.score, distanceKm: rs.distanceKm, cuisine: cuisineOf(p.sourceTags), kind: kindFor(p.category) } as ScoredPoi;
       })
-      .filter((poi) => (poi.distanceFromClusterKm ?? 99) <= 1.5)
-      .filter((poi) => !isChain(poi.name, poi.sourceTags))
+      .filter((p) => (p.distanceKm ?? 99) <= 1.5)
+      .filter((p) => !isChain(p.name, p.sourceTags))
       .sort((a, b) => b.score - a.score)
       .slice(0, 15);
 
-    const fallbackRestaurants = restaurantCandidates.length
-      ? restaurantCandidates
-      : nearbyRestaurantsRaw
-          .map((poi) => {
-            const foodScore = restaurantScore(poi, clusterCenter);
-            return {
-              ...poi,
-              score: foodScore.score,
-              distanceFromClusterKm: foodScore.distanceKm,
-              cuisine: cuisineTokens(poi.sourceTags)[0] || "generic"
-            };
-          })
-          .filter((poi) => (poi.distanceFromClusterKm ?? 99) <= 1.5)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 15);
+    if (restaurants.length < 2) continue;
 
-    const restaurantPool = fallbackRestaurants;
-    if (restaurantPool.length < 2) continue;
-
-    const lunchRef: [number, number] = [selectedAttractions[0].lon, selectedAttractions[0].lat];
-    const dinnerAnchor = selectedAttractions[selectedAttractions.length - 1];
-    const dinnerRef: [number, number] = [dinnerAnchor.lon, dinnerAnchor.lat];
-
-    const lunch = selectRestaurant(restaurantPool, lunchRef, usedRestaurantNames);
+    const lunch = selectRestaurant(restaurants, [attractions[0].lon, attractions[0].lat], usedRestaurantNames, undefined, cuisineMemory);
     if (!lunch) continue;
-
     usedRestaurantNames.add(lunch.name.toLowerCase());
-    const dinner =
-      selectRestaurant(restaurantPool, dinnerRef, usedRestaurantNames, lunch.cuisine) ??
-      selectRestaurant(restaurantPool, dinnerRef, usedRestaurantNames);
+
+    const dinner = selectRestaurant(restaurants, [attractions[attractions.length - 1].lon, attractions[attractions.length - 1].lat], usedRestaurantNames, lunch.cuisine, cuisineMemory)
+      ?? selectRestaurant(restaurants, [attractions[attractions.length - 1].lon, attractions[attractions.length - 1].lat], usedRestaurantNames, undefined, cuisineMemory);
     if (!dinner) continue;
     usedRestaurantNames.add(dinner.name.toLowerCase());
+    if (lunch.cuisine) cuisineMemory.push(lunch.cuisine);
+    if (dinner.cuisine) cuisineMemory.push(dinner.cuisine);
+    while (cuisineMemory.length > 5) cuisineMemory.shift();
 
-    // Optional cafe: max 1/day, and never back-to-back food due sequence placement.
-    let optionalCafe: ScoredPoi | undefined;
-    if (DAY_TEMPLATES[input.travelStyle].includeCafeOptional && input.preferences.cafes) {
-      const nearbyCafesRaw = await fetchCafesNear(env, clusterCenter, 1500);
-      const cafes = nearbyCafesRaw
-        .map((poi) => {
-          const cafe = cafeScore(poi, clusterCenter);
-          return { ...poi, score: cafe.score, distanceFromClusterKm: cafe.distanceKm };
+    let cafe: ScoredPoi | undefined;
+    if (t.cafe && input.preferences.cafes) {
+      cafe = (await fetchOverpassPois(env, cacheKey("cafes", center[0].toFixed(4), center[1].toFixed(4), 1500), foodQuery(center, 1500, "cafe"), "cafe"))
+        .map((p) => {
+          const cs = cafeScore(p, center);
+          return { ...p, score: cs.score, distanceKm: cs.distanceKm, kind: kindFor(p.category) } as ScoredPoi;
         })
-        .filter((poi) => (poi.distanceFromClusterKm ?? 99) <= 1.5)
+        .filter((p) => (p.distanceKm ?? 99) <= 1.5)
         .sort((a, b) => b.score - a.score)
-        .slice(0, 8);
-      optionalCafe = cafes[0];
+        .slice(0, 8)[0];
     }
 
-    // 6) Anchor-based day structure
-    const orderedPois = buildDaySequence(selectedAttractions, lunch, dinner, optionalCafe, input.travelStyle);
+    const seq: Poi[] = [];
+    attractions.forEach((a, i) => {
+      if (i === 2) seq.push({ ...lunch, category: "restaurant" });
+      seq.push(a);
+    });
+    if (!seq.some((s) => s.category === "restaurant")) seq.splice(Math.min(2, seq.length), 0, { ...lunch, category: "restaurant" });
+    if (cafe) seq.splice(Math.min(4, seq.length), 0, { ...cafe, category: "cafe" });
+    seq.push({ ...dinner, category: "restaurant" });
 
-    const coords = orderedPois.map((poi) => [poi.lon, poi.lat] as [number, number]);
+    const cleaned: Poi[] = [];
+    for (const p of seq) {
+      const a = cleaned[cleaned.length - 1];
+      const b = cleaned[cleaned.length - 2];
+      if (a && a.category === "restaurant" && p.category === "restaurant") continue;
+      if (a && b && a.category === p.category && b.category === p.category) continue;
+      cleaned.push(p);
+    }
+
+    const coords = cleaned.map((p) => [p.lon, p.lat] as [number, number]);
     const matrix = await osrmTable(env, coords, input.transportMode);
     const routeGeometry = await osrmRoute(env, coords, input.transportMode);
 
-    const start = fromTime(input.dailyStartTime);
-    let cursor = start;
-    let foodCount = 0;
-    let cafeCount = 0;
-
-    const stops: Stop[] = orderedPois.map((poi, idx) => {
-      const travel = idx === 0 ? 0 : matrix[idx - 1]?.[idx] ?? Math.round(haversineKm({ lat: orderedPois[idx - 1].lat, lon: orderedPois[idx - 1].lon }, { lat: poi.lat, lon: poi.lon }) * 12);
+    let cursor = fromTime(input.dailyStartTime);
+    let food = 0;
+    let stops: Stop[] = cleaned.map((p, i) => {
+      const travel = i === 0 ? 0 : matrix[i - 1]?.[i] ?? Math.round(haversineKm({ lat: cleaned[i - 1].lat, lon: cleaned[i - 1].lon }, { lat: p.lat, lon: p.lon }) * 12);
       cursor += travel;
-
-      if (poi.category === "restaurant") {
-        foodCount += 1;
-        cursor = clampToWindow(cursor, foodCount === 1 ? LUNCH_WINDOW : DINNER_WINDOW);
-      }
-
-      if (poi.category === "cafe") {
-        cafeCount += 1;
-      }
-
-      const durationMinutes = stopDuration(input.travelStyle, poi.category);
+      if (p.category === "restaurant") { food += 1; cursor = clampWindow(cursor, food === 1 ? LUNCH_WINDOW : DINNER_WINDOW); }
       const startTime = toTime(cursor);
+      const durationMinutes = stopDuration(input.travelStyle, p.category);
+      const tags = p.sourceTags ?? {};
       cursor += durationMinutes;
-
-      const notes =
-        poi.category === "restaurant"
-          ? foodCount === 1
-            ? "Lunch near morning attractions"
-            : "Dinner near final stops"
-          : idx === 0
-            ? "Morning anchor attraction"
-            : idx === 1
-              ? "Secondary nearby attraction"
-              : undefined;
-
       return {
-        id: `stop_${dayIdx + 1}_${idx + 1}`,
-        name: poi.name,
-        category: poi.category,
-        lat: poi.lat,
-        lon: poi.lon,
+        id: `stop_${dayIdx + 1}_${i + 1}`,
+        name: p.name,
+        category: p.category,
+        lat: p.lat,
+        lon: p.lon,
         startTime,
         durationMinutes,
         travelMinutesFromPrev: travel,
-        estimatedCost: estimateStopCost(poi.category, input.budgetSaver),
-        notes
+        estimatedCost: estimateStopCost(p.category, input.budgetSaver),
+        tags,
+        address: buildAddress(tags),
+        website: tags.website,
+        opening_hours: tags.opening_hours,
+        cuisine: tags.cuisine,
+        wikipedia: tags.wikipedia,
+        wikidata: tags.wikidata
       };
     });
 
-    // Strict rules post-check.
-    const restaurants = stops.filter((s) => s.category === "restaurant");
-    const cafes = stops.filter((s) => s.category === "cafe");
-    const attractionsOnly = stops.filter((s) => s.category !== "restaurant" && s.category !== "cafe");
-    const validLunch = restaurants[0] && fromTime(restaurants[0].startTime) >= LUNCH_WINDOW[0] && fromTime(restaurants[0].startTime) <= LUNCH_WINDOW[1];
-    const validDinner = restaurants[1] && fromTime(restaurants[1].startTime) >= DINNER_WINDOW[0] && fromTime(restaurants[1].startTime) <= DINNER_WINDOW[1];
+    if (stops.filter((s) => s.category === "restaurant").length !== 2 || stops.filter((s) => s.category === "cafe").length > 1) continue;
 
-    if (restaurants.length !== 2 || cafes.length > 1 || !validLunch || !validDinner || attractionsOnly.length < DAY_TEMPLATES[input.travelStyle].attractionsMin) {
-      continue;
+    const sunset = placeSunsetStop(stops, date);
+    stops = updateTimes(sunset.stops, fromTime(input.dailyStartTime));
+
+    let energy = calculateEnergy(stops);
+    if (energy.energyScore > ENERGY_LIMIT[input.travelStyle]) {
+      const drop = stops.findLastIndex((s) => s.category !== "restaurant" && s.category !== "cafe");
+      if (drop > 1) stops = stops.filter((_, i) => i !== drop);
+      energy = calculateEnergy(stops);
     }
 
-    const dayCost = stops.reduce((acc, stop) => acc + stop.estimatedCost, 0);
+    stops.forEach((s) => { diversityMemory.push(s.category); if (diversityMemory.length > 5) diversityMemory.shift(); });
+
+    const dayCost = stops.reduce((a, s) => a + s.estimatedCost, 0);
     days.push({
       dayNumber: dayIdx + 1,
-      date: input.dateFrom
-        ? new Date(new Date(input.dateFrom).getTime() + dayIdx * 86400000).toISOString().slice(0, 10)
-        : `Day ${dayIdx + 1}`,
+      date,
+      title: `Day ${dayIdx + 1}: ${attractions[0]?.name || "Highlights"}`,
       routeGeometry,
       stops,
       dayCost,
-      explanation: buildDayExplanation(clusterCenter)
+      totalCost: dayCost,
+      energyScore: energy.energyScore,
+      energyLevel: energy.energyLevel,
+      explanation: dayExplanation(center, input.travelStyle, energy.energyLevel, sunset.sunsetPlacement, dayCost <= input.budget / dayCount * 1.2, weekend)
     });
   }
 
-  // Fallback in edge cases where strict filters were too narrow.
-  if (!days.length && seededAttractions.length) {
-    const fallback = seededAttractions.slice(0, 3);
-    const stops: Stop[] = fallback.map((poi, idx) => ({
-      id: `stop_fallback_${idx + 1}`,
-      name: poi.name,
-      category: poi.category,
-      lat: poi.lat,
-      lon: poi.lon,
-      startTime: toTime(fromTime(input.dailyStartTime) + idx * 120),
-      durationMinutes: 75,
-      travelMinutesFromPrev: idx === 0 ? 0 : 20,
-      estimatedCost: estimateStopCost(poi.category, input.budgetSaver),
-      notes: idx === 0 ? "Morning anchor attraction" : "Curated fallback stop"
-    }));
-
-    days.push({
-      dayNumber: 1,
-      date: input.dateFrom ?? "Day 1",
-      routeGeometry: [],
-      stops,
-      dayCost: stops.reduce((a, s) => a + s.estimatedCost, 0),
-      explanation: "Fallback day centered on top-rated attractions due limited local dining data in the queried cluster."
-    });
-  }
-
-  const totalEstimatedCost = days.reduce((acc, day) => acc + day.dayCost, 0);
-
+  const balanced = balanceLongTrip(days, input.travelStyle);
+  const totalEstimatedCost = balanced.reduce((a, d) => a + d.dayCost, 0);
+  const e = balanced.map((d) => calculateEnergy(d.stops));
   return {
     city: input.city,
     bbox: geocoded.bbox,
     center: geocoded.center,
     currency: input.currency,
     totalEstimatedCost,
-    days,
+    days: balanced,
+    tripSummary: {
+      totalEstimatedCost,
+      totalWalkingDistance: Number(e.reduce((a, x) => a + x.walkingKm, 0).toFixed(2)),
+      travelTimeTotal: e.reduce((a, x) => a + x.travelTimeMinutes, 0),
+      diversityScore: diversityScore(balanced)
+    },
     preferences: input.preferences,
     generatedAt: new Date().toISOString()
   };
 }
 
 export async function fetchNearbyPois(env: Env, stop: Stop, radiusMeters: number, category?: string): Promise<Poi[]> {
-  const [lon, lat] = [stop.lon, stop.lat];
-  const query = `
-[out:json][timeout:20];
-(
-  node(around:${radiusMeters},${lat},${lon})["tourism"];
-  node(around:${radiusMeters},${lat},${lon})["amenity"~"restaurant|cafe"];
-  node(around:${radiusMeters},${lat},${lon})["leisure"~"park|garden"];
-  way(around:${radiusMeters},${lat},${lon})["tourism"];
-  way(around:${radiusMeters},${lat},${lon})["amenity"~"restaurant|cafe"];
-  way(around:${radiusMeters},${lat},${lon})["leisure"~"park|garden"];
-);
-out center tags 120;
-`;
+  const q = `\n[out:json][timeout:20];\n(\n  node(around:${radiusMeters},${stop.lat},${stop.lon})["tourism"];\n  node(around:${radiusMeters},${stop.lat},${stop.lon})["amenity"~"restaurant|cafe"];\n  node(around:${radiusMeters},${stop.lat},${stop.lon})["leisure"~"park|garden"];\n  way(around:${radiusMeters},${stop.lat},${stop.lon})["tourism"];\n  way(around:${radiusMeters},${stop.lat},${stop.lon})["amenity"~"restaurant|cafe"];\n  way(around:${radiusMeters},${stop.lat},${stop.lon})["leisure"~"park|garden"];\n);\nout center tags 120;\n`;
+  const pois = await fetchOverpassPois(env, cacheKey("nearby", stop.id, radiusMeters, category ?? "all"), q);
+  return pois.filter((p) => (!category || p.category.toLowerCase().includes(category.toLowerCase())) && haversineKm({ lat: stop.lat, lon: stop.lon }, { lat: p.lat, lon: p.lon }) <= radiusMeters / 1000);
+}
 
-  const pois = await fetchOverpassPois(
-    env,
-    cacheKey("nearby", stop.id, radiusMeters, category ?? "all"),
-    query
-  );
+function recalcSummary(it: Itinerary) {
+  const totalEstimatedCost = it.days.reduce((a, d) => a + d.dayCost, 0);
+  const e = it.days.map((d) => calculateEnergy(d.stops));
+  return {
+    totalEstimatedCost,
+    totalWalkingDistance: Number(e.reduce((a, x) => a + x.walkingKm, 0).toFixed(2)),
+    travelTimeTotal: e.reduce((a, x) => a + x.travelTimeMinutes, 0),
+    diversityScore: diversityScore(it.days)
+  };
+}
 
-  return pois.filter((poi) => {
-    if (category && !poi.category.toLowerCase().includes(category.toLowerCase())) return false;
-    return haversineKm({ lat: stop.lat, lon: stop.lon }, { lat: poi.lat, lon: poi.lon }) <= radiusMeters / 1000;
-  });
+export function replanDayInItinerary(itinerary: Itinerary, dayNumber: number): Itinerary {
+  const clone = structuredClone(itinerary);
+  const idx = clone.days.findIndex((d) => d.dayNumber === dayNumber);
+  if (idx < 0) return clone;
+  const day = clone.days[idx];
+
+  const memory = clone.days.flatMap((d, i) => i === idx ? [] : d.stops.map((s) => s.category)).slice(-5);
+  const attrs = enforceDiversity(day.stops.filter((s) => s.category !== "restaurant" && s.category !== "cafe").map((s) => ({ ...s, score: 0, sourceTags: {}, id: s.id } as unknown as ScoredPoi)), memory).map((x) => day.stops.find((s) => s.id === x.id)!).filter(Boolean);
+  const lunch = day.stops.find((s) => s.category === "restaurant");
+  const dinner = day.stops.filter((s) => s.category === "restaurant")[1];
+  const cafe = day.stops.find((s) => s.category === "cafe");
+
+  let stops = [...attrs];
+  if (lunch) stops.splice(Math.min(2, stops.length), 0, lunch);
+  if (cafe) stops.splice(Math.min(4, stops.length), 0, cafe);
+  if (dinner) stops.push(dinner);
+  stops = updateTimes(stops, fromTime(day.stops[0]?.startTime ?? "09:00"));
+
+  const en = calculateEnergy(stops);
+  day.stops = stops;
+  day.dayCost = stops.reduce((a, s) => a + s.estimatedCost, 0);
+  day.totalCost = day.dayCost;
+  day.energyScore = en.energyScore;
+  day.energyLevel = en.energyLevel;
+  day.explanation = `${day.explanation.split(".")[0]}. Replanned this day only while preserving diversity and budget alignment. Energy is ${en.energyLevel}.`;
+
+  clone.totalEstimatedCost = clone.days.reduce((a, d) => a + d.dayCost, 0);
+  clone.tripSummary = recalcSummary(clone);
+  return clone;
 }
 
 export function applyBudgetAdjustment(itinerary: Itinerary, newBudget: number): Itinerary {
   const factor = newBudget / Math.max(1, itinerary.totalEstimatedCost);
-  const days = itinerary.days.map((day) => {
-    const stops = day.stops.map((stop) => ({
-      ...stop,
-      estimatedCost: Math.max(0, Number((stop.estimatedCost * factor).toFixed(2)))
-    }));
-    return { ...day, stops, dayCost: stops.reduce((acc, s) => acc + s.estimatedCost, 0) };
+  const days = itinerary.days.map((d) => {
+    const stops = d.stops.map((s) => ({ ...s, estimatedCost: Math.max(0, Number((s.estimatedCost * factor).toFixed(2))) }));
+    const dayCost = stops.reduce((a, s) => a + s.estimatedCost, 0);
+    const e = calculateEnergy(stops);
+    return { ...d, stops, dayCost, totalCost: dayCost, energyScore: e.energyScore, energyLevel: e.energyLevel };
   });
-
-  return {
-    ...itinerary,
-    days,
-    totalEstimatedCost: days.reduce((acc, day) => acc + day.dayCost, 0)
-  };
+  const out: Itinerary = { ...itinerary, days, totalEstimatedCost: days.reduce((a, d) => a + d.dayCost, 0) };
+  out.tripSummary = recalcSummary(out);
+  return out;
 }
 
 export function applyPaceChange(itinerary: Itinerary, mode: TravelStyle): Itinerary {
-  const template = DAY_TEMPLATES[mode];
-  const maxAttractions = template.attractionsMax;
-
-  const days = itinerary.days.map((day) => {
-    const attractions = day.stops.filter((s) => s.category !== "restaurant" && s.category !== "cafe");
-    const food = day.stops.filter((s) => s.category === "restaurant").slice(0, 2);
-    const cafe = day.stops.find((s) => s.category === "cafe");
-
-    const trimmedAttractions = attractions.slice(0, Math.max(1, maxAttractions));
-    const rebuilt = [...trimmedAttractions, ...food, ...(cafe && template.includeCafeOptional ? [cafe] : [])];
-
-    return {
-      ...day,
-      stops: rebuilt,
-      dayCost: rebuilt.reduce((acc, s) => acc + s.estimatedCost, 0),
-      explanation: `Pace switched to ${mode}. ${day.explanation}`
-    };
+  const t = TEMPLATE[mode];
+  const days = itinerary.days.map((d) => {
+    const attrs = d.stops.filter((s) => s.category !== "restaurant" && s.category !== "cafe").slice(0, t.attractionsMax);
+    const lunch = d.stops.find((s) => s.category === "restaurant");
+    const dinner = d.stops.filter((s) => s.category === "restaurant")[1];
+    const cafe = t.cafe ? d.stops.find((s) => s.category === "cafe") : undefined;
+    let stops = [...attrs];
+    if (lunch) stops.splice(Math.min(2, stops.length), 0, lunch);
+    if (cafe) stops.splice(Math.min(4, stops.length), 0, cafe);
+    if (dinner) stops.push(dinner);
+    stops = updateTimes(stops, fromTime(d.stops[0]?.startTime ?? "09:00"));
+    const e = calculateEnergy(stops);
+    const dayCost = stops.reduce((a, s) => a + s.estimatedCost, 0);
+    return { ...d, stops, dayCost, totalCost: dayCost, energyScore: e.energyScore, energyLevel: e.energyLevel, explanation: `Pace switched to ${mode}. ${d.explanation}` };
   });
-
-  return {
-    ...itinerary,
-    days,
-    totalEstimatedCost: days.reduce((acc, day) => acc + day.dayCost, 0)
-  };
+  const out: Itinerary = { ...itinerary, days, totalEstimatedCost: days.reduce((a, d) => a + d.dayCost, 0) };
+  out.tripSummary = recalcSummary(out);
+  return out;
 }

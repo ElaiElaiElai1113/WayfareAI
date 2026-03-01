@@ -1,4 +1,16 @@
-﻿import type { Itinerary, PlanRequest, ShareResponse } from "@/types/itinerary";
+import { z } from "zod";
+import type { Itinerary, PlanRequest, ShareResponse, Stop, StopDescription } from "@/types/itinerary";
+
+const stopDescriptionSchema = z.object({
+  about: z.string().min(1).max(400),
+  why_this_stop: z.string().min(1).max(300),
+  quick_tip: z.string().min(1).max(220),
+  confidence: z.enum(["high", "medium", "low"])
+}).strict();
+
+function sanitizeText(input: string) {
+  return input.replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim();
+}
 
 async function safeJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -70,15 +82,37 @@ export async function streamChat(payload: { message: string; itinerary: Itinerar
     for (const line of parts) {
       if (!line.trim()) continue;
       const parsed = JSON.parse(line) as { type: "token" | "final"; value?: string; updatedItinerary?: Itinerary };
-      if (parsed.type === "token" && parsed.value) {
-        onChunk(parsed.value);
-      }
-      if (parsed.type === "final") {
-        updatedItinerary = parsed.updatedItinerary;
-      }
+      if (parsed.type === "token" && parsed.value) onChunk(parsed.value);
+      if (parsed.type === "final") updatedItinerary = parsed.updatedItinerary;
     }
   }
 
   return { updatedItinerary };
 }
 
+export async function postDescribeStop(payload: {
+  stop: Stop;
+  tripContext?: {
+    city?: string;
+    dayNumber?: number;
+    travelStyle?: string;
+    preferences?: Record<string, boolean>;
+  };
+  tone?: "premium" | "friendly" | "concise";
+}) {
+  const raw = await safeJson<StopDescription>(
+    await fetch(`${getApiBase()}/api/describe-stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+  );
+
+  const parsed = stopDescriptionSchema.parse(raw);
+  return {
+    about: sanitizeText(parsed.about),
+    why_this_stop: sanitizeText(parsed.why_this_stop),
+    quick_tip: sanitizeText(parsed.quick_tip),
+    confidence: parsed.confidence
+  };
+}

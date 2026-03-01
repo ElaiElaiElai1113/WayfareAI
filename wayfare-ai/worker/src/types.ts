@@ -28,15 +28,26 @@ export type Stop = {
   durationMinutes: number;
   travelMinutesFromPrev: number;
   estimatedCost: number;
+  tags?: Record<string, string>;
+  address?: string;
+  website?: string;
+  opening_hours?: string;
+  cuisine?: string;
+  wikipedia?: string;
+  wikidata?: string;
   notes?: string;
 };
 
 export type DayPlan = {
   dayNumber: number;
   date: string;
+  title?: string;
   routeGeometry?: [number, number][];
   stops: Stop[];
   dayCost: number;
+  totalCost?: number;
+  energyScore?: number;
+  energyLevel?: "Light" | "Moderate" | "High";
   explanation: string;
 };
 
@@ -47,6 +58,12 @@ export type Itinerary = {
   currency: string;
   totalEstimatedCost: number;
   days: DayPlan[];
+  tripSummary?: {
+    totalEstimatedCost: number;
+    totalWalkingDistance: number;
+    travelTimeTotal: number;
+    diversityScore: number;
+  };
   preferences: Record<string, boolean>;
   generatedAt: string;
 };
@@ -161,4 +178,3 @@ function isValidUrl(url: string): boolean {
     return false;
   }
 }
-

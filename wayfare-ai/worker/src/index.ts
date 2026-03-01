@@ -1,6 +1,6 @@
 ﻿import { Hono } from "hono";
 import { z } from "zod";
-import { createItinerary, fetchNearbyPois, applyBudgetAdjustment, applyPaceChange } from "../lib/engine";
+import { createItinerary, fetchNearbyPois, applyBudgetAdjustment, applyPaceChange, replanDayInItinerary } from "../lib/engine";
 import type { Env, Itinerary, PlanRequest } from "./types";
 import { validateEnv } from "./types";
 import { cacheKey, rateLimit, slugify, withCache, withRetry, callGLM, callGLMForItinerary } from "./utils";
@@ -306,6 +306,142 @@ app.post("/api/plan", async (c) => {
   }
 });
 
+const describeStopSchema = z.object({
+  stop: z.object({
+    id: z.string().optional(),
+    name: z.string(),
+    category: z.string().optional(),
+    lat: z.number().optional(),
+    lon: z.number().optional(),
+    tags: z.record(z.string()).optional(),
+    address: z.string().optional(),
+    website: z.string().optional(),
+    opening_hours: z.string().optional(),
+    cuisine: z.string().optional(),
+    wikipedia: z.string().optional(),
+    wikidata: z.string().optional()
+  }).strict(),
+  tripContext: z.object({
+    city: z.string().optional(),
+    dayNumber: z.number().optional(),
+    travelStyle: z.string().optional(),
+    preferences: z.record(z.boolean()).optional()
+  }).strict().optional(),
+  tone: z.enum(["premium", "friendly", "concise"]).optional()
+}).strict();
+
+const describeResponseSchema = z.object({
+  about: z.string().min(1).max(400),
+  why_this_stop: z.string().min(1).max(300),
+  quick_tip: z.string().min(1).max(220),
+  confidence: z.enum(["high", "medium", "low"])
+}).strict();
+
+function stripUnsafeText(input: string) {
+  return input.replace(/<[^>]*>/g, "").replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function safeFallbackDescription(input: z.infer<typeof describeStopSchema>) {
+  const stop = input.stop;
+  const tagsCount = Object.keys(stop.tags ?? {}).length;
+  const mediumSignals = [stop.website, stop.opening_hours, stop.wikipedia, stop.wikidata].filter(Boolean).length;
+  const confidence: "high" | "medium" | "low" =
+    mediumSignals >= 3 || tagsCount >= 8 ? "high" : mediumSignals >= 1 || tagsCount >= 5 ? "medium" : "low";
+  return {
+    about: `${stop.name} is included as a ${stop.category ?? "place"} stop based on available map data${stop.address ? ` in ${stop.address}` : ""}.`,
+    why_this_stop: confidence !== "low"
+      ? "This stop fits the route because supporting place details are available and it aligns with your itinerary flow."
+      : "This stop supports route flow, though source metadata is limited.",
+    quick_tip: stop.opening_hours
+      ? `Check listed hours before arrival (${stop.opening_hours}).`
+      : "Verify opening hours and access details before visiting.",
+    confidence
+  } as const;
+}
+
+function extractJsonObject(text: string) {
+  const m = text.match(/\{[\s\S]*\}/);
+  return m ? m[0] : null;
+}
+
+async function describeStopWithGLM(env: Env, payload: z.infer<typeof describeStopSchema>) {
+  if (!env.GLM_API_KEY || !env.GLM_BASE_URL) return safeFallbackDescription(payload);
+
+  const systemPrompt = [
+    "Use only given facts. If unknown, generalize.",
+    "Never invent prices, ratings, history, popularity, or claims not in input.",
+    "Keep tone premium but factual.",
+    "Output JSON only with exactly: about, why_this_stop, quick_tip, confidence."
+  ].join(" ");
+
+  const completion = await withRetry(async () => {
+    const res = await fetch(`${env.GLM_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.GLM_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: env.GLM_MODEL || "glm-4.7",
+        temperature: 0.2,
+        max_tokens: 320,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Input facts:\n${JSON.stringify(payload)}` }
+        ]
+      })
+    });
+    if (!res.ok) {
+      const err = new Error(`Describe-stop model error: ${res.status}`);
+      (err as any).status = res.status;
+      throw err;
+    }
+    return res.json();
+  }, { maxRetries: 1, baseDelay: 1200 });
+
+  const raw = completion?.choices?.[0]?.message?.content;
+  const asString = typeof raw === "string" ? raw : raw ? JSON.stringify(raw) : "";
+  const extracted = extractJsonObject(asString);
+  if (!extracted) return safeFallbackDescription(payload);
+
+  try {
+    const parsed = describeResponseSchema.parse(JSON.parse(extracted));
+    return {
+      about: stripUnsafeText(parsed.about),
+      why_this_stop: stripUnsafeText(parsed.why_this_stop),
+      quick_tip: stripUnsafeText(parsed.quick_tip),
+      confidence: parsed.confidence
+    };
+  } catch {
+    return safeFallbackDescription(payload);
+  }
+}
+
+app.post("/api/describe-stop", async (c) => {
+  try {
+    const payload = describeStopSchema.parse(await c.req.json());
+    const tone = payload.tone ?? "premium";
+    const key = cacheKey(
+      "describe-stop",
+      payload.stop.id ?? payload.stop.name.toLowerCase(),
+      tone,
+      payload.tripContext?.city ?? "",
+      payload.tripContext?.dayNumber ?? ""
+    );
+
+    const ttl = Number(c.env.CACHE_TTL_SECONDS || "21600");
+    const result = await withCache(c.env, key, ttl, async () => describeStopWithGLM(c.env, payload));
+    return c.json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: "Validation failed", issues: error.issues }, 400);
+    }
+    console.error("Describe-stop error:", error);
+    return c.json({ error: "Failed to describe stop" }, 500);
+  }
+});
+
 const chatSchema = z.object({
   message: z.string().min(1),
   itinerary: z.any(),
@@ -334,15 +470,12 @@ async function runRuleAssistant(env: Env, message: string, itinerary: Itinerary)
 
   if (intent === "replan_day") {
     const day = Number(parseArg(message)) || 1;
-    const clone = structuredClone(itinerary);
-    const targetDay = clone.days.find((d) => d.dayNumber === day);
+    const targetDay = itinerary.days.find((d) => d.dayNumber === day);
     if (!targetDay) {
       assistantMessage = `Day ${day} was not found in your itinerary.`;
     } else {
-      targetDay.stops = [...targetDay.stops].reverse();
-      targetDay.explanation = `Replanned Day ${day} with a reversed stop order to reduce backtracking from your current list.`;
-      updatedItinerary = clone;
-      assistantMessage = `Day ${day} has been replanned.`;
+      updatedItinerary = replanDayInItinerary(itinerary, day);
+      assistantMessage = `Day ${day} has been replanned while preserving trip-wide balance.`;
     }
   }
 
@@ -358,12 +491,21 @@ async function runRuleAssistant(env: Env, message: string, itinerary: Itinerary)
       const replacement = nearby.find((p) => p.name.toLowerCase() !== stop.name.toLowerCase());
       if (replacement) {
         const idx = day.stops.findIndex((s) => s.id === stop.id);
+        const tags = replacement.sourceTags ?? {};
+        const address = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ").trim();
         day.stops[idx] = {
           ...stop,
           name: replacement.name,
           category: replacement.category,
           lat: replacement.lat,
           lon: replacement.lon,
+          tags,
+          address: address || stop.address,
+          website: tags.website,
+          opening_hours: tags.opening_hours,
+          cuisine: tags.cuisine,
+          wikipedia: tags.wikipedia,
+          wikidata: tags.wikidata,
           notes: "Swapped by assistant within 2km"
         };
         assistantMessage = `Swapped ${stop.name} with ${replacement.name}.`;
