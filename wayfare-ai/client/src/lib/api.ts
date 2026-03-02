@@ -15,7 +15,18 @@ function sanitizeText(input: string) {
 async function safeJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed with ${response.status}`);
+    if (text) {
+      let parsed: { error?: string; details?: string } | null = null;
+      try {
+        parsed = JSON.parse(text) as { error?: string; details?: string };
+      } catch {
+        parsed = null;
+      }
+      if (parsed?.details) throw new Error(parsed.details);
+      if (parsed?.error) throw new Error(parsed.error);
+      throw new Error(text);
+    }
+    throw new Error(`Request failed with ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
@@ -100,11 +111,30 @@ export async function postDescribeStop(payload: {
   };
   tone?: "premium" | "friendly" | "concise";
 }) {
+  const stopPayload = {
+    id: payload.stop.id,
+    name: payload.stop.name,
+    category: payload.stop.category,
+    lat: payload.stop.lat,
+    lon: payload.stop.lon,
+    tags: payload.stop.tags,
+    address: payload.stop.address,
+    website: payload.stop.website,
+    opening_hours: payload.stop.opening_hours,
+    cuisine: payload.stop.cuisine,
+    wikipedia: payload.stop.wikipedia,
+    wikidata: payload.stop.wikidata
+  };
+
   const raw = await safeJson<StopDescription>(
     await fetch(`${getApiBase()}/api/describe-stop`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        stop: stopPayload,
+        tripContext: payload.tripContext,
+        tone: payload.tone
+      })
     })
   );
 

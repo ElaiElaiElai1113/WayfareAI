@@ -307,7 +307,10 @@ app.post("/api/plan", async (c) => {
       );
     }
     console.error("Plan endpoint error:", error);
-    return c.json({ error: "Failed to generate itinerary" }, 500);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const lower = message.toLowerCase();
+    const status = lower.includes("nominatim") || lower.includes("overpass") || lower.includes("osrm") ? 503 : 500;
+    return c.json({ error: "Failed to generate itinerary", details: message }, status);
   }
 });
 

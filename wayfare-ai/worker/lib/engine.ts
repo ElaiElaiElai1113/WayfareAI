@@ -1,5 +1,5 @@
 ﻿import type { Env, GeocodeResult, Itinerary, PlanRequest, Poi, Stop, TransportMode, TravelStyle } from "../src/types";
-import { cacheKey, fromTime, toTime, withCache } from "../src/utils";
+import { cacheKey, fromTime, toTime, withCache, withRetry } from "../src/utils";
 
 type ScoredPoi = Poi & { score: number; cuisine?: string; distanceKm?: number; kind?: "indoor" | "outdoor" };
 type EnergyLevel = "Light" | "Moderate" | "High";
@@ -58,6 +58,12 @@ function normalizePois(elements: Array<any>, forceCategory?: string): Poi[] {
   return out;
 }
 
+function isOverpassRateLimit(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const status = (error as any).status;
+  return status === 429 || /overpass error: 429/i.test(error.message);
+}
+
 function preferenceMatch(p: Poi, prefs: Record<string, boolean>): boolean {
   const active = Object.entries(prefs).filter(([, v]) => v).map(([k]) => k);
   if (!active.length) return true;
@@ -67,22 +73,41 @@ function preferenceMatch(p: Poi, prefs: Record<string, boolean>): boolean {
 async function fetchOverpassPois(env: Env, key: string, query: string, forceCategory?: string): Promise<Poi[]> {
   const ttl = Number(env.CACHE_TTL_SECONDS || "21600");
   return withCache(env, key, ttl, async () => {
-    const response = await fetch(env.OVERPASS_BASE_URL, { method: "POST", body: query });
-    if (!response.ok) throw new Error(`Overpass error: ${response.status}`);
-    const data = (await response.json()) as { elements?: Array<any> };
-    return normalizePois(data.elements ?? [], forceCategory);
+    return withRetry(async () => {
+      const response = await fetch(env.OVERPASS_BASE_URL, {
+        method: "POST",
+        body: query,
+        signal: AbortSignal.timeout(30000)
+      });
+      if (!response.ok) {
+        const error = new Error(`Overpass error: ${response.status}`);
+        (error as any).status = response.status;
+        throw error;
+      }
+      const data = (await response.json()) as { elements?: Array<any> };
+      return normalizePois(data.elements ?? [], forceCategory);
+    }, { maxRetries: 2, baseDelay: 1200 });
   });
 }
 
 async function geocodeCity(env: Env, city: string): Promise<GeocodeResult> {
   const ttl = Number(env.CACHE_TTL_SECONDS || "21600");
   return withCache(env, cacheKey("geo", city.toLowerCase()), ttl, async () => {
-    const response = await fetch(`${env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=1&q=${encodeURIComponent(city)}`, { headers: { "User-Agent": "WayfareAI/1.0" } });
-    if (!response.ok) throw new Error(`Nominatim error: ${response.status}`);
-    const data = (await response.json()) as Array<{ display_name: string; boundingbox: [string, string, string, string]; lon: string; lat: string }>;
-    if (!data.length) throw new Error("City not found");
-    const top = data[0];
-    return { name: top.display_name, bbox: [Number(top.boundingbox[2]), Number(top.boundingbox[0]), Number(top.boundingbox[3]), Number(top.boundingbox[1])], center: [Number(top.lon), Number(top.lat)] };
+    return withRetry(async () => {
+      const response = await fetch(`${env.NOMINATIM_BASE_URL}/search?format=jsonv2&limit=1&q=${encodeURIComponent(city)}`, {
+        headers: { "User-Agent": "WayfareAI/1.0" },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (!response.ok) {
+        const error = new Error(`Nominatim error: ${response.status}`);
+        (error as any).status = response.status;
+        throw error;
+      }
+      const data = (await response.json()) as Array<{ display_name: string; boundingbox: [string, string, string, string]; lon: string; lat: string }>;
+      if (!data.length) throw new Error("City not found");
+      const top = data[0];
+      return { name: top.display_name, bbox: [Number(top.boundingbox[2]), Number(top.boundingbox[0]), Number(top.boundingbox[3]), Number(top.boundingbox[1])], center: [Number(top.lon), Number(top.lat)] };
+    }, { maxRetries: 2, baseDelay: 800 });
   });
 }
 
@@ -363,7 +388,18 @@ export async function createItinerary(env: Env, input: PlanRequest): Promise<Iti
   const geocoded = await geocodeCity(env, input.city);
   const dayCount = input.days ?? (input.dateFrom && input.dateTo ? Math.max(1, Math.ceil((new Date(input.dateTo).getTime() - new Date(input.dateFrom).getTime()) / 86400000) + 1) : 3);
 
-  const attractionsRaw = await fetchOverpassPois(env, cacheKey("attractions", ...geocoded.bbox.map((x) => x.toFixed(3))), attractionQuery(geocoded.bbox));
+  let overpassRateLimited = false;
+  let attractionsRaw: Poi[] = [];
+  try {
+    attractionsRaw = await fetchOverpassPois(env, cacheKey("attractions", ...geocoded.bbox.map((x) => x.toFixed(3))), attractionQuery(geocoded.bbox));
+  } catch (error) {
+    if (isOverpassRateLimit(error)) {
+      overpassRateLimited = true;
+      attractionsRaw = [];
+    } else {
+      throw error;
+    }
+  }
   const base: ScoredPoi[] = attractionsRaw
     .filter((p) => p.category !== "restaurant" && p.category !== "cafe")
     .filter((p) => preferenceMatch(p, input.preferences))
@@ -424,70 +460,104 @@ export async function createItinerary(env: Env, input: PlanRequest): Promise<Iti
     }
     clusterMemory.add(clusterKey);
 
-    const restaurants1500 = (await fetchOverpassPois(env, cacheKey("restaurants", center[0].toFixed(4), center[1].toFixed(4), 1500), foodQuery(center, 1500, "restaurant"), "restaurant"))
-      .map((p) => {
-        const rs = restaurantScore(p, center);
-        return { ...p, score: rs.score, distanceKm: rs.distanceKm, cuisine: cuisineOf(p.sourceTags), kind: kindFor(p.category) } as ScoredPoi;
-      })
-      .filter((p) => (p.distanceKm ?? 99) <= 1.5)
-      .filter((p) => !isChain(p.name, p.sourceTags))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 15);
-
-    const restaurants3000 = restaurants1500.length >= 2
-      ? restaurants1500
-      : (await fetchOverpassPois(env, cacheKey("restaurants", center[0].toFixed(4), center[1].toFixed(4), 3000), foodQuery(center, 3000, "restaurant"), "restaurant"))
+    let restaurants1500: ScoredPoi[] = [];
+    try {
+      restaurants1500 = (await fetchOverpassPois(env, cacheKey("restaurants", center[0].toFixed(4), center[1].toFixed(4), 1500), foodQuery(center, 1500, "restaurant"), "restaurant"))
         .map((p) => {
           const rs = restaurantScore(p, center);
           return { ...p, score: rs.score, distanceKm: rs.distanceKm, cuisine: cuisineOf(p.sourceTags), kind: kindFor(p.category) } as ScoredPoi;
         })
-        .filter((p) => (p.distanceKm ?? 99) <= 3)
+        .filter((p) => (p.distanceKm ?? 99) <= 1.5)
         .filter((p) => !isChain(p.name, p.sourceTags))
         .sort((a, b) => b.score - a.score)
-        .slice(0, 20);
+        .slice(0, 15);
+    } catch (error) {
+      if (isOverpassRateLimit(error)) {
+        overpassRateLimited = true;
+        restaurants1500 = [];
+      } else {
+        throw error;
+      }
+    }
+
+    let restaurants3000 = restaurants1500;
+    if (restaurants1500.length < 2) {
+      try {
+        restaurants3000 = (await fetchOverpassPois(env, cacheKey("restaurants", center[0].toFixed(4), center[1].toFixed(4), 3000), foodQuery(center, 3000, "restaurant"), "restaurant"))
+          .map((p) => {
+            const rs = restaurantScore(p, center);
+            return { ...p, score: rs.score, distanceKm: rs.distanceKm, cuisine: cuisineOf(p.sourceTags), kind: kindFor(p.category) } as ScoredPoi;
+          })
+          .filter((p) => (p.distanceKm ?? 99) <= 3)
+          .filter((p) => !isChain(p.name, p.sourceTags))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 20);
+      } catch (error) {
+        if (isOverpassRateLimit(error)) {
+          overpassRateLimited = true;
+          restaurants3000 = restaurants1500;
+        } else {
+          throw error;
+        }
+      }
+    }
     const requiredRestaurantCount = input.travelStyle === "Relaxed" ? 1 : 2;
     const restaurants = restaurants3000;
-    if (restaurants.length < requiredRestaurantCount) {
+    const effectiveRequiredRestaurantCount = overpassRateLimited ? 0 : requiredRestaurantCount;
+    if (restaurants.length < effectiveRequiredRestaurantCount) {
       skipCounts.insufficientRestaurants += 1;
       continue;
     }
 
-    const lunch = selectRestaurant(restaurants, [attractions[0].lon, attractions[0].lat], usedRestaurantNames, undefined, cuisineMemory);
-    if (!lunch) {
+    const lunch = effectiveRequiredRestaurantCount > 0
+      ? selectRestaurant(restaurants, [attractions[0].lon, attractions[0].lat], usedRestaurantNames, undefined, cuisineMemory)
+      : undefined;
+    if (effectiveRequiredRestaurantCount > 0 && !lunch) {
       skipCounts.mealSelectionFailed += 1;
       continue;
     }
-    usedRestaurantNames.add(lunch.name.toLowerCase());
+    if (lunch) usedRestaurantNames.add(lunch.name.toLowerCase());
 
-    let dinner = selectRestaurant(restaurants, [attractions[attractions.length - 1].lon, attractions[attractions.length - 1].lat], usedRestaurantNames, lunch.cuisine, cuisineMemory)
-      ?? selectRestaurant(restaurants, [attractions[attractions.length - 1].lon, attractions[attractions.length - 1].lat], usedRestaurantNames, undefined, cuisineMemory);
-    if (!dinner && requiredRestaurantCount >= 2) {
+    let dinner = lunch
+      ? selectRestaurant(restaurants, [attractions[attractions.length - 1].lon, attractions[attractions.length - 1].lat], usedRestaurantNames, lunch.cuisine, cuisineMemory)
+        ?? selectRestaurant(restaurants, [attractions[attractions.length - 1].lon, attractions[attractions.length - 1].lat], usedRestaurantNames, undefined, cuisineMemory)
+      : undefined;
+    if (!dinner && effectiveRequiredRestaurantCount >= 2) {
       skipCounts.mealSelectionFailed += 1;
       continue;
     }
     if (dinner) usedRestaurantNames.add(dinner.name.toLowerCase());
-    if (lunch.cuisine) cuisineMemory.push(lunch.cuisine);
+    if (lunch?.cuisine) cuisineMemory.push(lunch.cuisine);
     if (dinner?.cuisine) cuisineMemory.push(dinner.cuisine);
     while (cuisineMemory.length > 5) cuisineMemory.shift();
 
     let cafe: ScoredPoi | undefined;
     if (t.cafe && input.preferences.cafes) {
-      cafe = (await fetchOverpassPois(env, cacheKey("cafes", center[0].toFixed(4), center[1].toFixed(4), 1500), foodQuery(center, 1500, "cafe"), "cafe"))
-        .map((p) => {
-          const cs = cafeScore(p, center);
-          return { ...p, score: cs.score, distanceKm: cs.distanceKm, kind: kindFor(p.category) } as ScoredPoi;
-        })
-        .filter((p) => (p.distanceKm ?? 99) <= 1.5)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 8)[0];
+      try {
+        cafe = (await fetchOverpassPois(env, cacheKey("cafes", center[0].toFixed(4), center[1].toFixed(4), 1500), foodQuery(center, 1500, "cafe"), "cafe"))
+          .map((p) => {
+            const cs = cafeScore(p, center);
+            return { ...p, score: cs.score, distanceKm: cs.distanceKm, kind: kindFor(p.category) } as ScoredPoi;
+          })
+          .filter((p) => (p.distanceKm ?? 99) <= 1.5)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 8)[0];
+      } catch (error) {
+        if (isOverpassRateLimit(error)) {
+          overpassRateLimited = true;
+          cafe = undefined;
+        } else {
+          throw error;
+        }
+      }
     }
 
     const seq: Poi[] = [];
     attractions.forEach((a, i) => {
-      if (i === 2) seq.push({ ...lunch, category: "restaurant" });
+      if (i === 2 && lunch) seq.push({ ...lunch, category: "restaurant" });
       seq.push(a);
     });
-    if (!seq.some((s) => s.category === "restaurant")) seq.splice(Math.min(2, seq.length), 0, { ...lunch, category: "restaurant" });
+    if (lunch && !seq.some((s) => s.category === "restaurant")) seq.splice(Math.min(2, seq.length), 0, { ...lunch, category: "restaurant" });
     if (cafe) seq.splice(Math.min(4, seq.length), 0, { ...cafe, category: "cafe" });
     if (dinner) {
       seq.push({ ...dinner, category: "restaurant" });
@@ -537,7 +607,7 @@ export async function createItinerary(env: Env, input: PlanRequest): Promise<Iti
       };
     });
 
-    if (stops.filter((s) => s.category === "restaurant").length < requiredRestaurantCount || stops.filter((s) => s.category === "cafe").length > 1) {
+    if (stops.filter((s) => s.category === "restaurant").length < effectiveRequiredRestaurantCount || stops.filter((s) => s.category === "cafe").length > 1) {
       skipCounts.compositionFailed += 1;
       continue;
     }
@@ -590,7 +660,10 @@ export async function createItinerary(env: Env, input: PlanRequest): Promise<Iti
       requestedDays: dayCount,
       generatedDays: balanced.length,
       skippedDays: Math.max(0, dayCount - balanced.length),
-      skipCounts
+      skipCounts: {
+        ...skipCounts,
+        overpassRateLimited: overpassRateLimited ? 1 : 0
+      }
     },
     generatedAt: new Date().toISOString()
   };
