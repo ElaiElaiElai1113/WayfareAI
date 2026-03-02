@@ -64,6 +64,12 @@ export type Itinerary = {
     travelTimeTotal: number;
     diversityScore: number;
   };
+  generationDiagnostics?: {
+    requestedDays: number;
+    generatedDays: number;
+    skippedDays: number;
+    skipCounts: Record<string, number>;
+  };
   preferences: Record<string, boolean>;
   generatedAt: string;
 };

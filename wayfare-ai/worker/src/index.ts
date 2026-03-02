@@ -5,25 +5,18 @@ import type { Env, Itinerary, PlanRequest } from "./types";
 import { validateEnv } from "./types";
 import { cacheKey, rateLimit, slugify, withCache, withRetry, callGLM, callGLMForItinerary } from "./utils";
 
-// Validate environment at startup (will be validated on first request with actual env)
-let envValidated = false;
-
 const app = new Hono<{ Bindings: Env }>();
 
 // Environment validation middleware
 app.use("/*", async (c, next) => {
-  if (!envValidated) {
-    try {
-      validateEnv(c.env);
-      envValidated = true;
-      console.log("Environment validated successfully");
-    } catch (error) {
-      console.error("Environment validation failed:", error);
-      return c.json(
-        { error: "Server configuration error", details: error instanceof Error ? error.message : "Unknown error" },
-        500
-      );
-    }
+  try {
+    validateEnv(c.env);
+  } catch (error) {
+    console.error("Environment validation failed:", error);
+    return c.json(
+      { error: "Server configuration error", details: error instanceof Error ? error.message : "Unknown error" },
+      500
+    );
   }
   await next();
 });
@@ -87,7 +80,7 @@ app.use("/api/*", async (c, next) => {
 
 app.use("/api/*", async (c, next) => {
   const ip = c.req.header("CF-Connecting-IP") || "unknown";
-  const limited = await rateLimit(c.env, ip);
+  const limited = await rateLimit(c.env, ip, "api-global");
   if (!limited.ok) {
     console.warn(`Rate limit exceeded for IP: ${ip}`);
     return c.json(
@@ -99,6 +92,12 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.get("/api/geocode", async (c) => {
+  const ip = c.req.header("CF-Connecting-IP") || "unknown";
+  const scopedLimit = await rateLimit(c.env, ip, "geo", 80, 60);
+  if (!scopedLimit.ok) {
+    return c.json({ error: "Geocode rate limit exceeded", retryAfter: 60 }, 429);
+  }
+
   const q = c.req.query("q");
   if (!q || q.length < 2) return c.json([], 200);
 
@@ -291,6 +290,12 @@ const planSchema = z.object({
 
 app.post("/api/plan", async (c) => {
   try {
+    const ip = c.req.header("CF-Connecting-IP") || "unknown";
+    const scopedLimit = await rateLimit(c.env, ip, "plan", 5, 60);
+    if (!scopedLimit.ok) {
+      return c.json({ error: "Plan rate limit exceeded", retryAfter: 60 }, 429);
+    }
+
     const payload = planSchema.parse(await c.req.json()) as PlanRequest;
     const itinerary = await createItinerary(c.env, payload);
     return c.json(itinerary);

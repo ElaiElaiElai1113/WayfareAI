@@ -44,6 +44,12 @@ export type Itinerary = {
   currency: string;
   totalEstimatedCost: number;
   days: DayPlan[];
+  generationDiagnostics?: {
+    requestedDays: number;
+    generatedDays: number;
+    skippedDays: number;
+    skipCounts: Record<string, number>;
+  };
   preferences: Record<string, boolean>;
   generatedAt: string;
 };

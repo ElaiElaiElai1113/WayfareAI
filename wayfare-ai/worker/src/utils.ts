@@ -87,10 +87,14 @@ export async function withCache<T>(env: Env, key: string, ttlSeconds: number, pr
   return value;
 }
 
-export async function rateLimit(env: Env, ip: string) {
-  const windowSeconds = Number(env.RATE_LIMIT_WINDOW_SECONDS || "60");
-  const maxRequests = Number(env.RATE_LIMIT_MAX_REQUESTS || "80");
-  const key = cacheKey("rl", ip, Math.floor(Date.now() / 1000 / windowSeconds));
+export async function rateLimit(
+  env: Env,
+  ip: string,
+  scope = "global",
+  maxRequests = Number(env.RATE_LIMIT_MAX_REQUESTS || "80"),
+  windowSeconds = Number(env.RATE_LIMIT_WINDOW_SECONDS || "60")
+) {
+  const key = cacheKey("rl", scope, ip, Math.floor(Date.now() / 1000 / windowSeconds));
   const current = Number((await env.RATE_LIMIT.get(key)) || "0") + 1;
   await env.RATE_LIMIT.put(key, String(current), { expirationTtl: windowSeconds + 5 });
 
@@ -125,6 +129,32 @@ export function slugify(input: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .slice(0, 40);
+}
+
+function summarizeItineraryForModel(itinerary: unknown) {
+  if (!itinerary || typeof itinerary !== "object") return itinerary;
+  const it = itinerary as any;
+  return {
+    city: it.city,
+    currency: it.currency,
+    totalEstimatedCost: it.totalEstimatedCost,
+    days: Array.isArray(it.days)
+      ? it.days.map((day: any) => ({
+        dayNumber: day.dayNumber,
+        date: day.date,
+        dayCost: day.dayCost,
+        stops: Array.isArray(day.stops)
+          ? day.stops.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            category: s.category,
+            startTime: s.startTime,
+            durationMinutes: s.durationMinutes
+          }))
+          : []
+      }))
+      : []
+  };
 }
 
 /**
@@ -166,7 +196,7 @@ export async function callGLM(
               {
                 role: "user",
                 content: itinerary
-                  ? `Message: ${message}\n\nCurrent Itinerary:\n${JSON.stringify(itinerary, null, 2)}`
+                  ? `Message: ${message}\n\nCurrent Itinerary:\n${JSON.stringify(summarizeItineraryForModel(itinerary), null, 2)}`
                   : message
               }
             ]
@@ -275,5 +305,3 @@ export async function callGLMForItinerary(
     return null;
   }
 }
-
-
